@@ -25,6 +25,515 @@
 
 ## Question 1. Explain the difference between CQRS and Event Sourcing
 
+# CQRS vs Event Sourcing
+
+## Direct answer
+
+**CQRS (Command Query Responsibility Segregation)** and **Event Sourcing** are two distinct architectural patterns that are often used together but solve different problems.
+
+- **CQRS** separates the **write (commands)** and **read (queries)** models to optimize each independently.
+- **Event Sourcing** stores every change to an application's state as a sequence of **immutable events** instead of storing only the latest state.
+
+**Key point:** You can use **CQRS without Event Sourcing**, **Event Sourcing without CQRS**, or **both together**.
+
+---
+
+## Core difference
+
+| CQRS                                     | Event Sourcing                             |
+| ---------------------------------------- | ------------------------------------------ |
+| Separates read and write models          | Stores state as a sequence of events       |
+| Focuses on application architecture      | Focuses on data persistence                |
+| Optimizes reads and writes independently | Provides complete history of state changes |
+| Current state is usually stored directly | Current state is reconstructed from events |
+| Doesn't require event storage            | Requires event storage                     |
+| Can use traditional databases            | Uses an event store                        |
+
+---
+
+# CQRS Explained
+
+In traditional CRUD systems:
+
+```
+          Client
+             |
+        User Service
+             |
+         User Table
+```
+
+The same model handles both:
+
+- Creating users
+- Updating users
+- Fetching users
+- Searching users
+
+CQRS separates these responsibilities.
+
+```
+            Client
+          /        \
+    Commands      Queries
+        |             |
+ Write Service    Read Service
+        |             |
+ Write DB       Read Database
+```
+
+### Command Side
+
+Responsible for:
+
+- Create
+- Update
+- Delete
+- Validation
+- Business rules
+
+Example:
+
+```
+POST /orders
+PUT /orders/123
+DELETE /orders/123
+```
+
+---
+
+### Query Side
+
+Responsible only for:
+
+- Reading
+- Searching
+- Aggregation
+- Reporting
+
+Example:
+
+```
+GET /orders
+GET /dashboard
+GET /analytics
+```
+
+The read database may be optimized differently:
+
+- Denormalized
+- Indexed for search
+- Cached
+- Materialized views
+
+---
+
+## Benefits of CQRS
+
+- Independent scaling
+- Faster reads
+- Simpler queries
+- Better separation of concerns
+- Different storage technologies for reads/writes
+
+Example:
+
+```
+Writes -> PostgreSQL
+
+Reads -> Elasticsearch
+```
+
+---
+
+## Drawbacks
+
+- More services
+- Eventual consistency
+- Synchronization complexity
+- More infrastructure
+
+---
+
+# Event Sourcing Explained
+
+Instead of storing:
+
+```
+Account
+-------
+Balance = 150
+```
+
+Store every event:
+
+```
+AccountCreated
+MoneyDeposited(100)
+MoneyDeposited(80)
+MoneyWithdrawn(30)
+```
+
+Current balance is calculated by replaying:
+
+```
+0
++100
++80
+-30
+-----
+150
+```
+
+The events become the source of truth.
+
+---
+
+## Traditional Database
+
+```
+Account
+
+ID    Balance
+
+1      150
+```
+
+Only current value exists.
+
+Past history is lost.
+
+---
+
+## Event Store
+
+```
+Event 1:
+AccountCreated
+
+Event 2:
+Deposit 100
+
+Event 3:
+Deposit 80
+
+Event 4:
+Withdraw 30
+```
+
+Nothing is deleted.
+
+Nothing is updated.
+
+Events are append-only.
+
+---
+
+## Rebuilding State
+
+```
+Events
+
+↓
+
+Replay
+
+↓
+
+Current State
+```
+
+If projection data is lost:
+
+```
+Replay all events
+
+↓
+
+Recreate database
+```
+
+---
+
+# Why Event Sourcing?
+
+### Complete audit trail
+
+Know exactly:
+
+- Who changed what
+- When
+- Why
+
+Perfect for:
+
+- Banking
+- Healthcare
+- Financial systems
+
+---
+
+### Time travel
+
+View system state at:
+
+```
+Yesterday
+
+Last week
+
+Last month
+```
+
+Simply replay events up to that point.
+
+---
+
+### Debugging
+
+Instead of asking:
+
+> "What happened?"
+
+You replay the exact sequence.
+
+---
+
+### Recovery
+
+If read databases fail:
+
+```
+Replay events
+
+↓
+
+Rebuild projections
+```
+
+---
+
+# CQRS + Event Sourcing Together
+
+These patterns complement each other well.
+
+```
+          Commands
+              |
+        Command Handler
+              |
+        Business Logic
+              |
+         Store Events
+              |
+        Event Store
+              |
+       Publish Events
+        /           \
+ Projection      Analytics
+ Builder          Service
+      |                |
+ Read Database     Other Systems
+```
+
+Flow:
+
+1. User sends command
+2. Validate command
+3. Generate event
+4. Save event
+5. Publish event
+6. Update read model
+7. Queries use read model
+
+---
+
+## Example: Order System
+
+Traditional CRUD
+
+```
+Order
+
+Status = Delivered
+```
+
+Previous states are lost.
+
+---
+
+With Event Sourcing
+
+```
+OrderCreated
+
+↓
+
+PaymentReceived
+
+↓
+
+OrderPacked
+
+↓
+
+OrderShipped
+
+↓
+
+OrderDelivered
+```
+
+Current status:
+
+```
+Replay events
+
+↓
+
+Delivered
+```
+
+Read model:
+
+```
+Orders Table
+
+ID
+Customer
+Status
+Delivery Date
+```
+
+Users query this table instead of replaying events on every request.
+
+---
+
+# When to use CQRS
+
+Use CQRS when:
+
+- Read traffic greatly exceeds write traffic
+- Read and write models differ significantly
+- Complex reporting is required
+- Independent scaling of reads and writes is beneficial
+
+Avoid CQRS for:
+
+- Small CRUD applications
+- Simple internal tools
+- Low-traffic systems
+
+---
+
+# When to use Event Sourcing
+
+Use Event Sourcing when:
+
+- Complete audit history is required
+- Financial transactions must be traceable
+- Regulatory compliance is important
+- You need to reconstruct or replay system state
+- Domain events are valuable to other services
+
+Avoid Event Sourcing when:
+
+- History is unimportant
+- Data changes are simple
+- Teams are unfamiliar with event-driven systems
+- Operational simplicity is a priority
+
+---
+
+# Can they be used independently?
+
+### CQRS without Event Sourcing ✅
+
+```
+Commands
+
+↓
+
+Write Database
+
+↓
+
+Replicate
+
+↓
+
+Read Database
+```
+
+This is common in many production systems.
+
+---
+
+### Event Sourcing without CQRS ✅
+
+```
+Commands
+
+↓
+
+Event Store
+
+↓
+
+Replay Events
+
+↓
+
+Current State
+```
+
+Reads can replay events or use simple projections without maintaining separate read/write models.
+
+---
+
+### CQRS + Event Sourcing ✅
+
+Most common in event-driven architectures.
+
+```
+Commands
+
+↓
+
+Event Store
+
+↓
+
+Events
+
+↓
+
+Read Projections
+
+↓
+
+Queries
+```
+
+---
+
+# Trade-offs
+
+| Aspect           | CQRS                                         | Event Sourcing                                    |
+| ---------------- | -------------------------------------------- | ------------------------------------------------- |
+| Primary goal     | Optimize reads and writes                    | Preserve complete history                         |
+| Data model       | Separate read/write models                   | Immutable event log                               |
+| Complexity       | Medium                                       | High                                              |
+| Audit history    | Limited unless implemented separately        | Built in                                          |
+| Read performance | Excellent with optimized projections         | Requires projections or replay                    |
+| Recovery         | Restore from backups                         | Replay events to rebuild state                    |
+| Scalability      | Independent scaling of read/write paths      | Scales well with append-only writes               |
+| Consistency      | Often eventual between read and write models | Often paired with eventual-consistent projections |
+
+# Interview-ready summary
+
+> **CQRS and Event Sourcing solve different problems. CQRS separates the command and query paths so each can be optimized independently, while Event Sourcing persists every state change as an immutable event rather than only the latest state. CQRS is an architectural pattern, whereas Event Sourcing is a persistence pattern. They are frequently combined: commands generate events stored in an event store, and those events are used to build read-optimized projections. This provides scalable reads, a complete audit trail, and the ability to rebuild application state by replaying events, at the cost of increased architectural and operational complexity.**
+
 ## Question 2. How do you prevent cache avalanche, cache stampede, and cache penetration?
 
 ## Question 3. How would you design a financial transaction ledger system?

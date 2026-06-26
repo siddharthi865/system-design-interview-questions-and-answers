@@ -25,6 +25,192 @@
 
 ## Question 1. What are the key components of a distributed system?
 
+## **Direct answer**
+
+A distributed system is built from multiple independent components that coordinate over a network to appear as a single coherent system. The key components typically include **clients, services/nodes, communication layer, data storage, coordination mechanisms, and reliability infrastructure**.
+
+---
+
+## **Key components of a distributed system**
+
+### 1. **Nodes (Compute Layer)**
+
+These are the machines or processes that do the actual work.
+
+- **Client nodes**: Initiate requests (web apps, mobile apps, APIs)
+- **Server nodes / service nodes**: Handle business logic
+- **Worker nodes**: Run background jobs (queues, batch processing)
+- **Stateful vs stateless nodes**
+  - Stateless services scale horizontally easily
+  - Stateful services require replication/sharding
+
+👉 Example: In a ride-hailing system, trip matching service nodes handle incoming ride requests.
+
+---
+
+### 2. **Communication Layer**
+
+Defines how nodes talk to each other.
+
+- **Synchronous communication**
+  - HTTP/REST, gRPC
+  - Request/response model
+
+- **Asynchronous communication**
+  - Message queues (Kafka, RabbitMQ)
+  - Event-driven systems
+
+Key concerns:
+
+- Serialization (JSON, Protobuf)
+- Latency
+- Retry and timeout handling
+- Network failures
+
+---
+
+### 3. **Data Storage Layer**
+
+Responsible for persistence and retrieval of data.
+
+- **Databases**
+  - SQL (strong consistency)
+  - NoSQL (scalability, flexible schema)
+
+- **Distributed storage systems**
+  - Replication (availability)
+  - Sharding (scalability)
+
+- **Caching systems**
+  - Redis, Memcached
+
+Key challenges:
+
+- Consistency vs availability
+- Replication lag
+- Data partitioning
+
+---
+
+### 4. **Coordination & Consensus Layer**
+
+Ensures nodes agree on system state.
+
+Used for:
+
+- Leader election
+- Distributed locking
+- Configuration management
+
+Common tools/algorithms:
+
+- ZooKeeper, etcd, Consul
+- Raft, Paxos
+
+👉 Example: Ensuring only one node processes a job in a distributed queue.
+
+---
+
+### 5. **Load Balancing Layer**
+
+Distributes traffic across nodes.
+
+- **L4 load balancer** (TCP-level)
+- **L7 load balancer** (HTTP-aware routing)
+- Algorithms: round robin, least connections, consistent hashing
+
+👉 Prevents overload and improves fault tolerance.
+
+---
+
+### 6. **Fault Tolerance & Reliability Mechanisms**
+
+Handles failures gracefully.
+
+- Replication (data and services)
+- Retry mechanisms (with exponential backoff)
+- Circuit breakers
+- Dead letter queues (DLQ)
+- Failover strategies (active-active / active-passive)
+
+👉 Ensures system continues working despite node/network failures.
+
+---
+
+### 7. **Consistency & State Management**
+
+Defines how data remains correct across nodes.
+
+- Strong consistency (immediate sync)
+- Eventual consistency (delayed sync)
+- Quorum-based reads/writes
+
+Key concepts:
+
+- CAP theorem trade-offs
+- Read-repair, anti-entropy
+
+---
+
+### 8. **Security Layer**
+
+Protects communication and data.
+
+- Authentication (OAuth, JWT, mTLS)
+- Authorization (RBAC, ABAC)
+- Encryption (in transit + at rest)
+- Service-to-service trust boundaries
+
+---
+
+### 9. **Observability Layer**
+
+Helps understand system health.
+
+- Logging (centralized logs)
+- Metrics (Prometheus, Grafana)
+- Distributed tracing (Jaeger, OpenTelemetry)
+- Alerting systems
+
+👉 Critical for debugging distributed failures.
+
+---
+
+## **High-level architecture view**
+
+```
+Clients
+   |
+Load Balancer
+   |
+Service Nodes (Stateless/Stateful)
+   |
+-------------------------------
+| Communication Layer (sync/async)
+| Data Layer (DBs, Cache)
+| Coordination (ZooKeeper/etcd)
+-------------------------------
+   |
+Monitoring + Security + Observability
+```
+
+---
+
+## **Trade-offs in distributed systems**
+
+| Area                        | Trade-off                                               |
+| --------------------------- | ------------------------------------------------------- |
+| Consistency vs Availability | Strong consistency reduces availability under partition |
+| Latency vs Reliability      | More retries improve reliability but increase latency   |
+| Stateful vs Stateless       | Stateless scales better, stateful is more complex       |
+| Sync vs Async communication | Sync is simpler, async is more scalable                 |
+
+---
+
+## **Interview-ready summary**
+
+A distributed system is composed of multiple independent nodes connected via a communication layer, backed by distributed storage, and coordinated through consensus mechanisms. It relies heavily on load balancing, fault tolerance strategies, and observability systems to ensure scalability and reliability under failures. The core challenge is managing trade-offs between consistency, availability, and performance while ensuring all components work together as a single logical system.
+
 ## Question 2. What is a service mesh?
 
 ## Question 3. What is a monolithic kernel vs. microkernel in system design?

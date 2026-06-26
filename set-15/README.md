@@ -25,6 +25,365 @@
 
 ## Question 1. How do you design a secure password storage system?
 
+# How do you design a secure password storage system?
+
+## Direct answer
+
+A secure password storage system should **never store plaintext passwords or use reversible encryption**. Instead, store a **unique random salt** and a **slow, adaptive password hash** (such as Argon2, bcrypt, or scrypt). During login, hash the supplied password with the same parameters and compare it securely with the stored hash.
+
+---
+
+# Requirements / Problem Framing
+
+### Functional Requirements
+
+- User registration
+- User login
+- Password reset
+- Password change
+- Password verification
+
+### Non-functional Requirements
+
+- Strong resistance against database compromise
+- Protection from brute-force and rainbow table attacks
+- Scalable authentication
+- Low latency for users while remaining computationally expensive for attackers
+
+---
+
+# High-Level Architecture
+
+```text
+                 Registration
+
+Client
+   |
+   | Password
+   v
+Authentication Service
+   |
+Generate Random Salt
+   |
+Hash(password + salt)
+   |
+Store:
+   - User ID
+   - Salt
+   - Hash
+   - Hash algorithm/version
+   |
+Database
+```
+
+### Login Flow
+
+```text
+Client
+   |
+Username + Password
+   |
+Authentication Service
+   |
+Fetch salt + stored hash
+   |
+Hash(input password + salt)
+   |
+Constant-time comparison
+   |
+Success / Failure
+```
+
+---
+
+# Database Schema
+
+```text
+Users
+------
+user_id
+email
+password_hash
+salt
+hash_algorithm
+work_factor
+created_at
+updated_at
+```
+
+Example:
+
+```text
+user_id: 123
+salt: x7T9...
+algorithm: Argon2id
+memory_cost: 64MB
+iterations: 3
+parallelism: 2
+password_hash: 5af9...
+```
+
+Many modern password hash formats encode the salt and parameters within the stored hash string itself, so storing them in separate columns is optional.
+
+---
+
+# Password Hashing Process
+
+### Registration
+
+```text
+User Password
+      |
+Generate Random Salt
+      |
+Password + Salt
+      |
+Argon2 / bcrypt / scrypt
+      |
+Password Hash
+      |
+Store Hash (+ salt/parameters)
+```
+
+---
+
+### Login
+
+```text
+Entered Password
+        |
+Stored Salt
+        |
+Hash Again
+        |
+Compare
+        |
+Authenticated
+```
+
+---
+
+# Why Salting Is Important
+
+Suppose two users choose:
+
+```text
+Password = password123
+```
+
+Without salt:
+
+```text
+Hash(password123)
+= ABC123
+```
+
+Both users have identical hashes.
+
+An attacker immediately knows they use the same password.
+
+---
+
+With random salts:
+
+```text
+Salt1 + password123
+→ Hash = X92AF
+
+Salt2 + password123
+→ Hash = P81KD
+```
+
+Same password, completely different hashes.
+
+Benefits:
+
+- Prevents rainbow table attacks
+- Prevents identical hashes
+- Forces attackers to crack passwords individually
+
+---
+
+# Choosing the Right Hash Algorithm
+
+| Algorithm | Suitable?        | Notes                                                 |
+| --------- | ---------------- | ----------------------------------------------------- |
+| MD5       | ❌ No            | Extremely fast and broken for password storage        |
+| SHA-1     | ❌ No            | Too fast and outdated                                 |
+| SHA-256   | ❌ Alone, no     | Fast hashes are unsuitable for passwords              |
+| bcrypt    | ✅ Yes           | Widely used and battle-tested                         |
+| scrypt    | ✅ Yes           | Memory-hard, good GPU resistance                      |
+| Argon2id  | ✅ Best practice | Memory-hard and currently recommended for new systems |
+
+---
+
+# Additional Security Measures
+
+### 1. Pepper
+
+A pepper is a secret value stored outside the database (for example, in a secret manager).
+
+```text
+Hash(password + salt + pepper)
+```
+
+If the database is stolen but the pepper is not, cracking becomes significantly harder.
+
+---
+
+### 2. Adaptive Cost
+
+Increase hashing cost over time.
+
+Example:
+
+```text
+bcrypt cost = 10
+```
+
+Later:
+
+```text
+bcrypt cost = 12
+```
+
+or increase Argon2 memory and iteration parameters.
+
+This keeps pace with faster hardware.
+
+---
+
+### 3. Constant-Time Comparison
+
+Avoid:
+
+```text
+hash1 == hash2
+```
+
+because naive comparisons may leak timing information.
+
+Use constant-time comparison functions provided by cryptographic libraries.
+
+---
+
+### 4. Strong Password Policy
+
+Require:
+
+- Minimum length
+- Common-password detection
+- Password strength checks
+- Support for long passphrases
+
+---
+
+### 5. Rate Limiting
+
+Prevent brute-force attacks.
+
+Example:
+
+```text
+5 failed logins
+      ↓
+Temporary lock
+
+OR
+
+Exponential backoff
+```
+
+---
+
+### 6. Multi-Factor Authentication (MFA)
+
+Even if a password is compromised:
+
+```text
+Password
+      +
+OTP / Authenticator App / Security Key
+```
+
+adds another layer of protection.
+
+---
+
+# Password Reset Flow
+
+Never email passwords.
+
+Instead:
+
+```text
+User requests reset
+      |
+Generate secure random token
+      |
+Store hashed token with expiration
+      |
+Email reset link
+      |
+User sets new password
+      |
+Generate new salt
+      |
+Hash new password
+      |
+Replace old hash
+```
+
+---
+
+# Scalability Considerations
+
+Authentication servers should be stateless.
+
+```text
+        Load Balancer
+          /      \
+      Auth      Auth
+        |          |
+      Shared Database
+```
+
+Benefits:
+
+- Horizontal scaling
+- No session affinity required
+- Easy deployment
+
+---
+
+# Trade-offs
+
+| Choice                | Advantages                               | Disadvantages                          |
+| --------------------- | ---------------------------------------- | -------------------------------------- |
+| Fast hashes (SHA-256) | Very fast                                | Easy for attackers to brute-force      |
+| bcrypt                | Mature and widely supported              | Less memory-hard than newer algorithms |
+| scrypt                | Good GPU resistance                      | More complex tuning                    |
+| Argon2id              | Strong protection against modern attacks | Higher CPU and memory usage            |
+
+---
+
+# Security Considerations
+
+- Never store plaintext passwords.
+- Never encrypt passwords for later decryption.
+- Always use a unique random salt.
+- Prefer memory-hard password hashing.
+- Protect peppers in a secrets manager.
+- Enforce TLS so passwords are encrypted in transit.
+- Log authentication events, but never log passwords or password hashes.
+- Rotate hash parameters over time and rehash passwords upon successful login when older parameters are detected.
+
+---
+
+# Interview-ready Summary
+
+> A secure password storage system stores only **salted, one-way password hashes** using adaptive algorithms like **Argon2id**, **bcrypt**, or **scrypt**. Each password gets a unique random salt, optional pepper protection, and configurable work factors. During login, the password is rehashed and compared using a constant-time comparison. Combined with rate limiting, MFA, secure password resets, and periodic parameter upgrades, this design remains resilient even if the database is compromised.
+
 ## Question 2. What is token revocation in authentication?
 
 ## Question 3. What is a man-in-the-middle (MITM) attack?

@@ -22,6 +22,242 @@
 
 ## Question 1. What is data masking and when is it used?
 
+## Direct answer
+
+**Data masking** is the process of hiding or replacing sensitive data with realistic but non-sensitive values while preserving the original data's format and usability. It allows developers, testers, analysts, or third parties to work with data without exposing confidential information.
+
+The goal is to **protect sensitive data while maintaining the usefulness of the dataset**.
+
+---
+
+## Why data masking is needed
+
+Production databases often contain sensitive information such as:
+
+- Personal information (PII)
+- Credit card numbers
+- Bank account details
+- Passwords
+- Medical records
+- Business secrets
+
+Giving direct access to production data increases the risk of:
+
+- Data breaches
+- Insider threats
+- Compliance violations
+- Accidental exposure
+
+Instead, organizations create a masked copy of the data.
+
+Example:
+
+| Original                                | Masked                                      |
+| --------------------------------------- | ------------------------------------------- |
+| John Smith                              | David Brown                                 |
+| [john@gmail.com](mailto:john@gmail.com) | [user123@test.com](mailto:user123@test.com) |
+| 9876-5432-1234-5678                     | XXXX-XXXX-XXXX-5678                         |
+| Salary = ₹2,50,000                      | Salary = ₹2,40,500                          |
+
+The data still looks realistic but no longer reveals the original values.
+
+---
+
+## Common data masking techniques
+
+| Technique         | Description                        | Example                      |
+| ----------------- | ---------------------------------- | ---------------------------- |
+| **Substitution**  | Replace with realistic fake values | Alice → Emma                 |
+| **Shuffling**     | Rearrange values within a column   | Swap customer names          |
+| **Redaction**     | Hide part or all of the value      | XXXX-XXXX-1234               |
+| **Encryption**    | Encrypt the data                   | Sensitive value → Ciphertext |
+| **Tokenization**  | Replace with a random token        | Card → TKN-874321            |
+| **Nulling**       | Replace with NULL or blanks        | Phone → NULL                 |
+| **Randomization** | Modify numbers randomly            | Salary ₹80k → ₹82k           |
+
+---
+
+## Types of data masking
+
+### 1. Static Data Masking (SDM)
+
+A copy of the production database is created, and sensitive data is permanently masked.
+
+```
+Production DB
+      |
+Copy Database
+      |
+Mask Sensitive Fields
+      |
+Testing / Development
+```
+
+**Used for:**
+
+- Development
+- QA testing
+- Training environments
+
+**Advantages:**
+
+- Production remains untouched
+- Safe for sharing
+- Fast access
+
+---
+
+### 2. Dynamic Data Masking (DDM)
+
+Data remains unchanged in the database. Masking is applied only when users query it, based on their permissions.
+
+Example:
+
+**Admin sees**
+
+```
+Card Number:
+1234-5678-9876-5432
+```
+
+**Support Engineer sees**
+
+```
+XXXX-XXXX-XXXX-5432
+```
+
+The stored data is identical; only the displayed value changes.
+
+---
+
+### 3. On-the-fly Data Masking
+
+Sensitive data is masked during migration, ETL, or replication between systems.
+
+```
+Production DB
+      |
+Data Pipeline
+      |
+Mask Data
+      |
+Data Warehouse
+```
+
+---
+
+## When is data masking used?
+
+### 1. Development and testing
+
+Developers often need production-like data to reproduce bugs, but should not access real customer information.
+
+Example:
+
+- Testing an e-commerce checkout flow using masked customer data.
+
+---
+
+### 2. QA environments
+
+Quality assurance teams validate business workflows without viewing sensitive user information.
+
+---
+
+### 3. Analytics and reporting
+
+Business analysts can analyze trends without exposing personal identifiers.
+
+Example:
+
+- Revenue by city instead of customer names.
+
+---
+
+### 4. Third-party vendors
+
+External consultants or offshore teams may need access to datasets. Masking enables collaboration while protecting confidential information.
+
+---
+
+### 5. Compliance
+
+Many regulations require protection of sensitive data, including:
+
+- GDPR
+- HIPAA
+- PCI DSS
+
+Data masking helps organizations reduce compliance risk.
+
+---
+
+## Data masking vs encryption
+
+| Feature                | Data Masking                            | Encryption                            |
+| ---------------------- | --------------------------------------- | ------------------------------------- |
+| Purpose                | Hide sensitive information for safe use | Protect data from unauthorized access |
+| Reversible             | Usually no                              | Yes (with the key)                    |
+| Used in production     | Sometimes (dynamic masking)             | Yes                                   |
+| Used for testing       | Yes                                     | Usually no                            |
+| Data remains realistic | Yes                                     | No (ciphertext)                       |
+
+Example:
+
+**Masked**
+
+```
+9876-XXXX-XXXX-4321
+```
+
+**Encrypted**
+
+```
+A9F8C2D14E8B...
+```
+
+Masked data is readable and useful for testing, whereas encrypted data is unreadable until decrypted.
+
+---
+
+## Data masking vs tokenization
+
+| Data Masking                                | Tokenization                                           |
+| ------------------------------------------- | ------------------------------------------------------ |
+| Creates fake but realistic values           | Replaces values with meaningless tokens                |
+| Original value is generally not recoverable | Original can be retrieved through a secure token vault |
+| Common in testing and analytics             | Common in payment and financial systems                |
+
+Example:
+
+```
+Original:
+4111-1111-1111-1111
+
+Masked:
+XXXX-XXXX-XXXX-1111
+
+Tokenized:
+TKN_98AF72CD
+```
+
+---
+
+## Best practices
+
+- Mask only the fields containing sensitive data.
+- Preserve data formats so applications continue to function correctly.
+- Maintain consistency (the same input should map to the same masked value when needed for testing relationships).
+- Never expose production data in development or test environments.
+- Apply role-based access control alongside masking.
+- Audit access to sensitive datasets and masking policies.
+
+---
+
+## Interview-ready summary
+
+> **Data masking is a technique for protecting sensitive information by replacing it with realistic but non-sensitive values while preserving the data's format and usefulness. It is commonly used in development, testing, analytics, and third-party data sharing to prevent exposure of production data and meet compliance requirements. Unlike encryption, masking is typically irreversible and intended for safe data usage rather than secure storage or transmission.**
+
 ## Question 2. How do you design a secure session management system?
 
 ## Question 3. What is secret management in microservices?

@@ -25,6 +25,342 @@
 
 ## Question 1. How do you approach designing a large-scale system from scratch?
 
+## Direct answer
+
+A structured way to approach designing a large-scale system is:
+
+1. **Clarify requirements**
+2. **Estimate scale**
+3. **Design a high-level architecture**
+4. **Define APIs and data model**
+5. **Identify bottlenecks and scale each component**
+6. **Address reliability, availability, and consistency**
+7. **Add security and observability**
+8. **Discuss trade-offs and future improvements**
+
+In a system design interview, the process is often more important than the final architecture.
+
+---
+
+## Requirements / Problem Framing
+
+Before drawing any architecture, understand what you're building.
+
+### Functional requirements
+
+What should the system do?
+
+Examples:
+
+- Users can upload photos
+- Users can send messages
+- Users can search content
+- Users can place orders
+
+### Non-functional requirements
+
+How should the system behave?
+
+Examples:
+
+- 99.99% availability
+- <200ms response latency
+- Support 100M users
+- Strong consistency for payments
+- High durability for stored data
+
+### Clarify assumptions
+
+Ask questions like:
+
+- Expected traffic?
+- Read-heavy or write-heavy?
+- Global or regional users?
+- Real-time requirements?
+- Data retention period?
+
+---
+
+## Capacity / Sizing
+
+Before choosing technologies, estimate scale.
+
+Example:
+
+Assume:
+
+- 10 million DAU
+- 100 requests/user/day
+
+```
+Total requests/day = 1B
+Average QPS ≈ 11,500
+Peak QPS ≈ 5–10x average
+Peak ≈ 100,000 QPS
+```
+
+Estimate:
+
+- Storage growth
+- Network bandwidth
+- Cache size
+- Database throughput
+
+These estimates drive architectural decisions.
+
+---
+
+## High-Level Architecture
+
+Start simple.
+
+```text
+Clients
+   |
+Load Balancer
+   |
+Application Servers
+   |
++---------+---------+
+|                   |
+Cache           Database
+|
+CDN (for static content)
+```
+
+### Core components
+
+**Load Balancer**
+
+- Distributes traffic
+- Removes unhealthy servers
+
+**Application Servers**
+
+- Stateless whenever possible
+- Easy horizontal scaling
+
+**Cache**
+
+- Reduce database load
+- Improve latency
+
+**Database**
+
+- Persistent storage
+- Source of truth
+
+**CDN**
+
+- Serve static assets closer to users
+
+---
+
+## Deep Design Considerations
+
+### 1. Scalability
+
+When traffic grows:
+
+#### Scale application layer
+
+```text
+LB
+ |
++----+----+----+
+App1 App2 App3
+```
+
+Add more servers horizontally.
+
+#### Scale database
+
+Techniques:
+
+- Read replicas
+- Sharding
+- Partitioning
+
+```text
+Users A-M -> Shard 1
+Users N-Z -> Shard 2
+```
+
+---
+
+### 2. Caching Strategy
+
+Frequently accessed data should not hit the database every time.
+
+```text
+Request
+   |
+ Cache
+   |
+Database
+```
+
+Common pattern:
+
+```text
+Cache Aside
+```
+
+1. Check cache
+2. Cache miss → DB
+3. Store result in cache
+
+Benefits:
+
+- Lower latency
+- Lower DB load
+
+---
+
+### 3. Availability
+
+Avoid single points of failure.
+
+```text
+        LB
+      /    \
+   App1   App2
+      \    /
+     Database Cluster
+```
+
+Use:
+
+- Multiple application instances
+- Database replication
+- Multi-AZ deployment
+
+---
+
+### 4. Reliability
+
+Ensure data is not lost.
+
+Methods:
+
+- Replication
+- Backups
+- Durable storage
+- Disaster recovery plans
+
+Example:
+
+```text
+Primary DB
+    |
+Replicas
+```
+
+---
+
+### 5. Consistency
+
+Choose based on business needs.
+
+| System      | Consistency Requirement |
+| ----------- | ----------------------- |
+| Banking     | Strong consistency      |
+| Inventory   | Strong or near-strong   |
+| Social feed | Eventual consistency    |
+| Analytics   | Eventual consistency    |
+
+Not every component needs strong consistency.
+
+---
+
+### 6. Asynchronous Processing
+
+For expensive operations:
+
+```text
+User Request
+     |
+ Application
+     |
+ Message Queue
+     |
+ Background Workers
+```
+
+Examples:
+
+- Email sending
+- Notifications
+- Video processing
+- Analytics
+
+Benefits:
+
+- Faster user response
+- Better fault tolerance
+
+---
+
+## Security / Observability
+
+### Security
+
+- Authentication
+- Authorization
+- TLS encryption
+- Rate limiting
+- Input validation
+- Secrets management
+
+### Observability
+
+Monitor:
+
+**Metrics**
+
+- QPS
+- Latency
+- Error rate
+- CPU/Memory
+
+**Logs**
+
+- Request logs
+- Error logs
+
+**Tracing**
+
+- End-to-end request tracking
+
+Tools commonly used:
+
+- Prometheus
+- Grafana
+- ELK
+- OpenTelemetry
+
+---
+
+## Trade-offs
+
+Every design choice has trade-offs.
+
+| Choice             | Benefit           | Cost                   |
+| ------------------ | ----------------- | ---------------------- |
+| Cache              | Low latency       | Stale data             |
+| Replication        | High availability | Consistency complexity |
+| Sharding           | Massive scale     | Operational complexity |
+| Async processing   | Higher throughput | Eventual consistency   |
+| Strong consistency | Correctness       | Higher latency         |
+
+A strong system design discussion is often about explaining these trade-offs.
+
+---
+
+## Interview-Ready Summary
+
+When designing a large-scale system from scratch, I first clarify functional and non-functional requirements, then estimate scale to understand traffic and storage needs. Next, I design a simple high-level architecture with load balancers, stateless services, caches, databases, and CDNs. After that, I focus on scaling, reliability, availability, consistency, caching, replication, and asynchronous processing. Finally, I discuss security, observability, and the trade-offs behind key architectural decisions. This structured approach ensures the design can evolve from a simple system to one that supports millions of users.
+
 ## Question 2. What are the major components of a distributed system?
 
 ## Question 3. Explain client-server architecture

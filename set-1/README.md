@@ -25,6 +25,197 @@
 
 ## Question 1. What is system design? Why is it important in software engineering?
 
+# Direct answer
+
+**System design** is the process of defining the architecture, components, data flow, interfaces, and infrastructure of a software system so that it meets both functional and non-functional requirements.
+
+In simple terms, system design answers questions like:
+
+- How will the system work end-to-end?
+- How will different services communicate?
+- How will data be stored and retrieved?
+- How will the system scale as traffic grows?
+- How will it remain reliable and available during failures?
+
+It acts as the blueprint for building software systems.
+
+---
+
+# What does system design involve?
+
+A system designer typically decides:
+
+| Area          | Examples                                  |
+| ------------- | ----------------------------------------- |
+| Architecture  | Monolith vs Microservices                 |
+| Data Storage  | SQL vs NoSQL                              |
+| Scalability   | Load balancing, caching, sharding         |
+| Reliability   | Replication, failover, redundancy         |
+| Communication | REST, gRPC, messaging queues              |
+| Consistency   | Strong vs eventual consistency            |
+| Security      | Authentication, authorization, encryption |
+| Observability | Logging, monitoring, tracing              |
+
+---
+
+# Why is system design important?
+
+### 1. Helps systems scale
+
+A design that works for 100 users may fail for 10 million users.
+
+Example:
+
+- A single database server might work initially.
+- As traffic grows, you may need:
+  - Read replicas
+  - Database sharding
+  - Caching
+  - Load balancers
+
+Good system design anticipates growth.
+
+---
+
+### 2. Improves reliability and availability
+
+Failures are inevitable:
+
+- Servers crash
+- Databases fail
+- Networks become unavailable
+
+System design introduces:
+
+- Replication
+- Failover mechanisms
+- Redundancy
+- Disaster recovery
+
+This ensures the system continues operating even when components fail.
+
+---
+
+### 3. Meets performance requirements
+
+Users expect fast responses.
+
+For example:
+
+- Search results should appear in milliseconds.
+- Video streaming should not buffer frequently.
+
+System design helps reduce:
+
+- Latency
+- Network overhead
+- Database bottlenecks
+
+through techniques like caching, indexing, and distributed processing.
+
+---
+
+### 4. Controls cost
+
+Poor architecture can become extremely expensive.
+
+Example:
+
+- Hitting the database for every request increases infrastructure costs.
+- A cache can serve most requests at a fraction of the cost.
+
+Good design balances:
+
+- Performance
+- Reliability
+- Cost
+
+---
+
+### 5. Enables maintainability
+
+Large systems are built and maintained by many engineers.
+
+Good design provides:
+
+- Clear service boundaries
+- Modular components
+- Well-defined APIs
+
+This makes systems easier to:
+
+- Understand
+- Modify
+- Debug
+- Extend
+
+---
+
+# Real-world example
+
+Consider designing a URL shortener like TinyURL.
+
+A naive design:
+
+```
+User -> Application -> Database
+```
+
+Works for a small number of users.
+
+At scale:
+
+```
+Users
+   |
+Load Balancer
+   |
+App Servers
+   |
+Cache (Redis)
+   |
+Database Cluster
+   |
+Replication + Backups
+```
+
+Now the system can:
+
+- Handle millions of requests
+- Survive server failures
+- Respond with low latency
+
+This evolution is the essence of system design.
+
+---
+
+# What system design focuses on beyond functionality
+
+Writing code answers:
+
+> "Can the feature work?"
+
+System design answers:
+
+> "Can the feature work reliably for millions of users under real-world conditions?"
+
+Typical concerns include:
+
+- Scalability
+- Availability
+- Reliability
+- Consistency
+- Fault tolerance
+- Performance
+- Security
+- Cost efficiency
+
+---
+
+# Interview-ready summary
+
+> System design is the process of defining a software system's architecture, components, data storage, communication patterns, and infrastructure to satisfy both functional and non-functional requirements. It is important because it ensures systems can scale, remain reliable, perform efficiently, tolerate failures, and be maintained as user traffic and business requirements grow.
+
 ## Question 2. Explain the difference between High-Level Design (HLD) and Low-Level Design (LLD)
 
 ## Question 3. What are functional and non-functional requirements in system design?

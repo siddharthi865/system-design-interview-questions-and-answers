@@ -25,6 +25,233 @@
 
 ## Question 1. Difference between SQL and NoSQL databases
 
+# Direct Answer
+
+**SQL and NoSQL are two different categories of databases.**
+
+- **SQL databases** are relational databases that store data in tables with predefined schemas and use SQL (Structured Query Language) for querying.
+- **NoSQL databases** are non-relational databases designed for flexible schemas, horizontal scalability, and handling large volumes of distributed data.
+
+In interviews, the key distinction is:
+
+> **Choose SQL when data consistency and relationships are important. Choose NoSQL when scalability, flexibility, and high throughput are the primary requirements.**
+
+---
+
+# Comparison Table
+
+| Feature           | SQL Database                         | NoSQL Database                         |
+| ----------------- | ------------------------------------ | -------------------------------------- |
+| Data Model        | Tables (rows & columns)              | Document, Key-Value, Column, Graph     |
+| Schema            | Fixed schema                         | Flexible / schema-less                 |
+| Relationships     | Strong support (joins, foreign keys) | Usually denormalized data              |
+| Query Language    | SQL                                  | Database-specific APIs/query languages |
+| Scalability       | Traditionally vertical               | Designed for horizontal scaling        |
+| Consistency       | Strong consistency (ACID)            | Often eventual consistency (BASE)      |
+| Transactions      | Full ACID transactions               | Limited or specialized transactions    |
+| Complex Queries   | Excellent                            | Usually limited compared to SQL        |
+| Data Integrity    | Strong constraints                   | Application often enforces integrity   |
+| Typical Use Cases | Banking, ERP, Inventory              | Social media, analytics, IoT, caching  |
+
+---
+
+# Examples
+
+### SQL Databases
+
+- MySQL
+- PostgreSQL
+- Oracle Database
+- Microsoft SQL Server
+
+Example table:
+
+**Users**
+
+| id  | name  | email                                   |
+| --- | ----- | --------------------------------------- |
+| 1   | John  | [john@test.com](mailto:john@test.com)   |
+| 2   | Alice | [alice@test.com](mailto:alice@test.com) |
+
+SQL Query:
+
+```sql
+SELECT * FROM Users WHERE id = 1;
+```
+
+---
+
+### NoSQL Databases
+
+- MongoDB
+- Apache Cassandra
+- Redis
+- Amazon DynamoDB
+
+Example document:
+
+```json
+{
+  "id": 1,
+  "name": "John",
+  "email": "john@test.com"
+}
+```
+
+Query:
+
+```javascript
+db.users.find({ id: 1 });
+```
+
+---
+
+# Why SQL Uses Joins and NoSQL Often Doesn't
+
+### SQL
+
+Normalized data:
+
+```text
+Users
+-----
+1, John
+
+Orders
+------
+101, UserId=1
+102, UserId=1
+```
+
+Query:
+
+```sql
+SELECT *
+FROM Users u
+JOIN Orders o
+ON u.id = o.userId;
+```
+
+SQL databases are optimized for relationships.
+
+### NoSQL
+
+Data is often denormalized:
+
+```json
+{
+  "userId": 1,
+  "name": "John",
+  "orders": [{ "id": 101 }, { "id": 102 }]
+}
+```
+
+The entire user document can be fetched with a single lookup.
+
+---
+
+# Scalability Perspective
+
+### SQL Scaling
+
+```text
+App
+ |
+Primary DB
+ |
+Read Replicas
+```
+
+Common approaches:
+
+- Vertical scaling (larger machine)
+- Read replicas
+- Sharding (more complex)
+
+### NoSQL Scaling
+
+```text
+App
+ |
++-----+-----+-----+
+|Node1|Node2|Node3|
++-----+-----+-----+
+```
+
+Designed for:
+
+- Automatic partitioning/sharding
+- Distributed storage
+- Massive scale
+
+Examples:
+
+- Social media feeds
+- Event tracking
+- IoT telemetry
+
+---
+
+# ACID vs BASE
+
+| SQL                          | NoSQL                   |
+| ---------------------------- | ----------------------- |
+| ACID                         | BASE                    |
+| Strong consistency           | Eventual consistency    |
+| Strict transactions          | High availability       |
+| Data correctness prioritized | Scalability prioritized |
+
+### ACID
+
+- Atomicity
+- Consistency
+- Isolation
+- Durability
+
+Example: Bank transfer.
+
+### BASE
+
+- Basically Available
+- Soft State
+- Eventual Consistency
+
+Example: Social media likes count.
+
+---
+
+# When to Use Which?
+
+### Use SQL When
+
+✅ Banking systems
+✅ Payment systems
+✅ Inventory management
+✅ Order management
+✅ Financial records
+✅ Strong relationships between entities
+
+Example: An e-commerce order database where order, payment, and inventory updates must succeed together.
+
+---
+
+### Use NoSQL When
+
+✅ User activity tracking
+✅ Social media feeds
+✅ Real-time analytics
+✅ IoT sensor data
+✅ Large-scale distributed systems
+✅ Rapidly changing schemas
+
+Example: Storing billions of user events per day.
+
+---
+
+# Interview-Ready Summary
+
+> SQL databases store structured data in relational tables and provide strong consistency, ACID transactions, and powerful joins. NoSQL databases use flexible schemas and are designed for horizontal scalability, high throughput, and distributed architectures. SQL is preferred for transactional systems requiring data integrity, while NoSQL is preferred for large-scale applications where scalability and schema flexibility are more important.
+
 ## Question 2. When should you use SQL over NoSQL and vice versa?
 
 ## Question 3. What is database normalization?

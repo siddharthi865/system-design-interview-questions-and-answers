@@ -363,6 +363,398 @@ When designing a large-scale system from scratch, I first clarify functional and
 
 ## Question 2. What are the major components of a distributed system?
 
+## Direct answer
+
+A distributed system is typically composed of multiple independent machines that work together to appear as a single system to users. The major components are:
+
+1. **Clients**
+2. **Load Balancers**
+3. **Application Services**
+4. **Databases**
+5. **Caches**
+6. **Message Queues / Event Streams**
+7. **Storage Systems**
+8. **Service Discovery & Coordination**
+9. **Monitoring & Logging Systems**
+10. **Security Components**
+11. **Network Infrastructure**
+
+Not every distributed system needs all of them, but these are the building blocks used in most large-scale architectures.
+
+---
+
+## High-Level View
+
+```text
+                Clients
+                   |
+            Load Balancer
+                   |
+        +----------+----------+
+        |                     |
+   Service A            Service B
+        |                     |
+   +----+----+           +----+----+
+   |         |           |         |
+ Cache     Database    Queue     Storage
+              |
+          Replicas
+
+        Monitoring / Logging
+               Security
+```
+
+---
+
+## 1. Clients
+
+Clients are the entry point into the system.
+
+Examples:
+
+- Web browsers
+- Mobile apps
+- IoT devices
+- Other services
+
+Responsibilities:
+
+- Send requests
+- Display results
+- Handle user interactions
+
+Example:
+A mobile app sends a request to fetch a user's timeline.
+
+---
+
+## 2. Load Balancer
+
+Distributes incoming traffic across multiple servers.
+
+Responsibilities:
+
+- Traffic distribution
+- Health checking
+- Failover
+- SSL termination
+
+Example:
+
+```text
+          LB
+        /  |  \
+     App1 App2 App3
+```
+
+Benefits:
+
+- Improves availability
+- Prevents server overload
+- Enables horizontal scaling
+
+---
+
+## 3. Application Services
+
+Contain the business logic.
+
+Examples:
+
+- User Service
+- Payment Service
+- Order Service
+- Notification Service
+
+Responsibilities:
+
+- Process requests
+- Validate data
+- Communicate with databases and other services
+
+Typically deployed as:
+
+```text
+Multiple Stateless Instances
+```
+
+so they can scale horizontally.
+
+---
+
+## 4. Databases
+
+Store persistent data.
+
+Examples:
+
+- User profiles
+- Orders
+- Transactions
+
+Common types:
+
+| Type            | Example Use Case     |
+| --------------- | -------------------- |
+| Relational DB   | Payments, Orders     |
+| Key-Value Store | Sessions             |
+| Document DB     | User content         |
+| Graph DB        | Social relationships |
+
+Responsibilities:
+
+- Durability
+- Query processing
+- Data consistency
+
+---
+
+## 5. Cache
+
+Stores frequently accessed data in memory.
+
+Examples:
+
+- User profiles
+- Product information
+- Session data
+
+```text
+Request
+   |
+ Cache
+   |
+Database
+```
+
+Benefits:
+
+- Lower latency
+- Reduced database load
+
+Popular choices:
+
+- Redis
+- Memcached
+
+---
+
+## 6. Message Queue / Event Streaming System
+
+Enables asynchronous communication.
+
+Examples:
+
+- Kafka
+- RabbitMQ
+- Amazon SQS
+
+Architecture:
+
+```text
+Producer
+   |
+ Queue
+   |
+Consumer
+```
+
+Use cases:
+
+- Email delivery
+- Notifications
+- Order processing
+- Analytics pipelines
+
+Benefits:
+
+- Decoupling
+- Better scalability
+- Improved fault tolerance
+
+---
+
+## 7. Distributed Storage
+
+Stores large files and objects.
+
+Examples:
+
+- Images
+- Videos
+- Backups
+- Logs
+
+Popular systems:
+
+- HDFS
+- Object storage services
+- Distributed file systems
+
+Responsibilities:
+
+- Durability
+- Replication
+- Large-scale storage
+
+---
+
+## 8. Service Discovery & Coordination
+
+Helps services find each other dynamically.
+
+Example:
+
+```text
+Service A
+    |
+Service Registry
+    |
+Service B
+```
+
+Responsibilities:
+
+- Service registration
+- Health tracking
+- Leader election
+- Distributed coordination
+
+Examples:
+
+- ZooKeeper
+- etcd
+- Consul
+
+Especially important in microservice architectures.
+
+---
+
+## 9. Monitoring, Logging, and Tracing
+
+Provides visibility into system health.
+
+### Monitoring
+
+Tracks:
+
+- CPU
+- Memory
+- QPS
+- Latency
+- Error rates
+
+### Logging
+
+Stores:
+
+- Request logs
+- Error logs
+- Audit logs
+
+### Distributed Tracing
+
+Tracks requests across services.
+
+```text
+User Request
+   |
+ Service A
+   |
+ Service B
+   |
+ Database
+```
+
+Popular tools:
+
+- Prometheus
+- Grafana
+- ELK Stack
+- OpenTelemetry
+
+---
+
+## 10. Security Components
+
+Protect the system.
+
+Examples:
+
+- Authentication services
+- Authorization systems
+- API gateways
+- Secret management
+
+Responsibilities:
+
+- Identity verification
+- Access control
+- Encryption
+- Rate limiting
+
+---
+
+## 11. Network Infrastructure
+
+The communication layer connecting all nodes.
+
+Responsibilities:
+
+- Routing
+- DNS
+- Secure communication
+- Cross-region connectivity
+
+Components:
+
+- DNS
+- Reverse proxies
+- Firewalls
+- Virtual networks
+
+Without reliable networking, a distributed system cannot function.
+
+---
+
+## How They Work Together
+
+Consider an e-commerce request:
+
+```text
+User
+  |
+Load Balancer
+  |
+Order Service
+  |
+Cache
+  |
+Database
+  |
+Kafka
+  |
+Notification Service
+```
+
+Flow:
+
+1. User places an order.
+2. Load balancer routes request.
+3. Order service validates request.
+4. Cache is checked.
+5. Database stores order.
+6. Event is published to Kafka.
+7. Notification service sends confirmation email.
+
+Each component has a specialized responsibility, making the overall system scalable and resilient.
+
+---
+
+## Interview-Ready Summary
+
+The core components of a distributed system are clients, load balancers, application services, databases, caches, message queues, distributed storage, service discovery systems, monitoring infrastructure, security services, and networking components. Together they enable scalability, availability, fault tolerance, and maintainability by distributing work across multiple machines while presenting a unified system to users.
+
 ## Question 3. Explain client-server architecture
 
 ## Question 4. Explain microservices architecture vs monolithic architecture

@@ -144,6 +144,277 @@ A system can have low latency but low throughput (fast individual requests, limi
 
 ## Question 2. What are bottlenecks in a system? How do you identify and fix them?
 
+# Direct answer
+
+A **bottleneck** is any component in a system that limits the overall performance, scalability, or throughput of the entire system. Even if other components are fast, the slowest component determines the system's maximum performance.
+
+A common interview principle is:
+
+> **A system is only as fast as its slowest component.**
+
+---
+
+# Intuition
+
+Imagine an assembly line in a factory:
+
+- Machine A processes **1,000 items/min**
+- Machine B processes **200 items/min**
+- Machine C processes **800 items/min**
+
+Although two machines are very fast, the entire factory can only produce **200 items/min** because Machine B is the bottleneck.
+
+The same principle applies to distributed systems.
+
+---
+
+# Common bottlenecks in distributed systems
+
+| Component          | Possible bottleneck                                              |
+| ------------------ | ---------------------------------------------------------------- |
+| CPU                | High computation, encryption, compression                        |
+| Memory             | Insufficient RAM causing swapping or frequent garbage collection |
+| Disk I/O           | Slow reads/writes, HDD limitations                               |
+| Network            | Limited bandwidth, high latency, packet loss                     |
+| Database           | Slow queries, table scans, lock contention                       |
+| Cache              | Low hit rate, overloaded cache server                            |
+| Load Balancer      | Uneven traffic distribution                                      |
+| Application Server | Too few instances, thread pool exhaustion                        |
+| Message Queue      | Slow consumers, queue backlog                                    |
+| External APIs      | High response times, rate limits                                 |
+
+---
+
+# How to identify bottlenecks
+
+A systematic approach is to measure every layer instead of guessing.
+
+### 1. Monitor system metrics
+
+Track metrics such as:
+
+- CPU utilization
+- Memory usage
+- Disk I/O
+- Network throughput
+- Request latency
+- Error rate
+- Requests per second (RPS)
+- Queue length
+
+Example:
+
+```
+CPU = 95%
+Memory = 40%
+Disk = 20%
+```
+
+This strongly suggests the CPU is the bottleneck.
+
+---
+
+### 2. Analyze latency
+
+Break down request latency into stages.
+
+Example:
+
+```
+Client
+   ↓
+Load Balancer      2 ms
+   ↓
+API Server         8 ms
+   ↓
+Database          120 ms
+   ↓
+Response
+```
+
+Since the database dominates the request time, it is the likely bottleneck.
+
+---
+
+### 3. Use distributed tracing
+
+Tracing tools show where requests spend time across services.
+
+Typical flow:
+
+```
+User Request
+      │
+      ▼
+API Gateway
+      │
+      ▼
+User Service
+      │
+      ▼
+Database
+```
+
+If one service consistently has much higher latency, it is a candidate bottleneck.
+
+---
+
+### 4. Monitor queue lengths
+
+Growing queues indicate downstream components cannot keep up.
+
+Example:
+
+```
+Incoming requests = 10,000/sec
+
+Processing capacity = 6,000/sec
+
+Queue keeps growing
+```
+
+The consumer or processing service is the bottleneck.
+
+---
+
+### 5. Load testing
+
+Gradually increase traffic until performance degrades.
+
+Observe:
+
+- Response time
+- Throughput
+- CPU usage
+- Error rate
+
+The first component to saturate often reveals the bottleneck.
+
+---
+
+# How to fix bottlenecks
+
+The solution depends on the limiting resource.
+
+| Bottleneck    | Common fixes                                                    |
+| ------------- | --------------------------------------------------------------- |
+| CPU           | Optimize algorithms, add more instances, parallelize work       |
+| Memory        | Increase RAM, reduce object allocation, tune garbage collection |
+| Disk          | Use SSDs, batching, asynchronous writes                         |
+| Network       | Compression, CDNs, larger bandwidth, reduce payload size        |
+| Database      | Add indexes, optimize queries, caching, replication, sharding   |
+| Cache         | Increase cache size, improve cache keys, raise hit rate         |
+| Load Balancer | Better routing algorithms, autoscaling                          |
+| Queue         | Add more consumers, partition queues, increase parallelism      |
+
+---
+
+# Example: Database bottleneck
+
+Architecture:
+
+```
+Users
+   │
+   ▼
+API Servers
+   │
+   ▼
+Database
+```
+
+Problem:
+
+```
+Database CPU = 98%
+
+API CPU = 20%
+
+Network = Normal
+```
+
+The database is saturated.
+
+Possible fixes:
+
+- Add indexes
+- Optimize slow queries
+- Introduce a cache
+- Add read replicas
+- Partition (shard) data
+- Batch writes
+- Move analytics to separate systems
+
+---
+
+# Example: Network bottleneck
+
+Suppose an image service sends 20 MB images.
+
+```
+Bandwidth = 1 Gbps
+
+Average image = 20 MB
+```
+
+Fixes:
+
+- Compress images
+- Resize images
+- Use a CDN
+- Serve images closer to users
+- Upgrade network capacity
+
+---
+
+# Example: CPU bottleneck
+
+```
+CPU = 100%
+
+Memory = 35%
+
+Network = 20%
+```
+
+Possible solutions:
+
+- Optimize expensive computations
+- Cache repeated results
+- Use asynchronous processing
+- Scale horizontally
+- Move heavy tasks to worker services
+
+---
+
+# Best practices
+
+- **Measure before optimizing**—avoid guessing.
+- Optimize the biggest bottleneck first.
+- Re-measure after every change.
+- Continuously monitor production systems.
+- Use autoscaling for predictable load increases.
+- Cache frequently accessed data.
+- Design services to scale independently.
+
+---
+
+# Trade-offs
+
+| Solution                | Advantages                             | Disadvantages                                         |
+| ----------------------- | -------------------------------------- | ----------------------------------------------------- |
+| Vertical scaling        | Simple to implement                    | Hardware limits, higher cost                          |
+| Horizontal scaling      | Better scalability and fault tolerance | Increased complexity                                  |
+| Caching                 | Reduces latency and database load      | Cache invalidation challenges                         |
+| Sharding                | Scales database capacity               | More complex queries and operations                   |
+| Asynchronous processing | Improves responsiveness                | Added operational complexity and eventual consistency |
+
+---
+
+# Interview-ready summary
+
+> **A bottleneck is the component that limits a system's overall performance or scalability. To identify it, monitor key metrics like CPU, memory, disk I/O, network, latency, and queue lengths, and use load testing and distributed tracing to pinpoint where requests spend the most time. Once identified, fix the bottleneck by optimizing code, adding caching, scaling horizontally, tuning databases, or increasing parallelism. Since removing one bottleneck often exposes the next, performance tuning is an iterative process of measure, optimize, and re-measure.**
+
 ## Question 3. What is a Single Point of Failure (SPOF)?
 
 ## Question 4. What is the difference between synchronous and asynchronous communication?

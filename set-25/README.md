@@ -640,6 +640,457 @@ Distributed tracing helps identify latency hotspots across the bidding pipeline.
 
 ## Question 2. How do you design a real-time fraud detection system?
 
+# Design a Real-Time Fraud Detection System
+
+## Direct answer
+
+A real-time fraud detection system analyzes transactions as they occur and decides within **10–100 ms** whether to **approve, reject, or flag** them for further review. It combines **rule-based detection**, **machine learning models**, **historical user behavior**, and **stream processing** to identify suspicious activity while minimizing false positives.
+
+The system must balance:
+
+- Low latency
+- High detection accuracy
+- High availability
+- Scalability
+- Explainability for fraud decisions
+
+---
+
+# Requirements / Problem Framing
+
+## Functional Requirements
+
+- Evaluate every incoming transaction in real time
+- Detect fraudulent patterns
+- Assign a fraud risk score
+- Approve, reject, or challenge (e.g., OTP/2FA)
+- Track user/device/IP history
+- Support dynamic fraud rules
+- Generate alerts
+- Store fraud decisions for audits
+
+## Non-Functional Requirements
+
+- Decision latency: **<50–100 ms**
+- Millions of transactions/day
+- High availability (99.99%+)
+- Horizontally scalable
+- Highly accurate with low false positives
+- Fault tolerant
+
+---
+
+# High-Level Architecture
+
+```text
+                  Payment Gateway
+                         |
+                  Transaction API
+                         |
+                  Load Balancer
+                         |
+                 Fraud Detection Service
+                         |
+      ------------------------------------------------
+      |              |             |                 |
+ Rule Engine   Feature Store   ML Inference   Risk Scoring
+      |              |             |                 |
+      -------------------------------
+                     |
+             Decision Engine
+         (Approve / Reject / Review)
+                     |
+             Payment Processor
+
+---------------------------------------------------------
+
+        Async Event Pipeline
+
+Transactions
+      |
+ Kafka / Pulsar
+      |
+ Stream Processing
+      |
+ Fraud Analytics
+ Rule Updates
+ Model Training
+ Dashboard
+```
+
+---
+
+# Core Components
+
+## 1. Transaction Ingestion
+
+Receives:
+
+- card payments
+- bank transfers
+- wallet payments
+- login events
+- account changes
+
+Each event contains:
+
+- User ID
+- Merchant
+- Amount
+- Currency
+- Device ID
+- IP Address
+- Location
+- Timestamp
+
+The ingestion layer is stateless and horizontally scalable.
+
+---
+
+## 2. Feature Store
+
+Fraud decisions depend heavily on historical context.
+
+Examples:
+
+- Number of transactions in last minute
+- Total spending today
+- Failed login attempts
+- Previous fraud history
+- Known devices
+- Trusted locations
+- Velocity metrics
+- Chargeback history
+
+These features are stored in fast, in-memory systems like Redis or Aerospike for sub-millisecond lookups.
+
+---
+
+## 3. Rule Engine
+
+Fast deterministic checks catch obvious fraud.
+
+Examples:
+
+```text
+IF amount > $10,000
+AND new device
+THEN high risk
+```
+
+```text
+IF >10 failed logins in 5 minutes
+THEN block account
+```
+
+```text
+IF card used in two countries within 10 minutes
+THEN reject
+```
+
+Advantages:
+
+- Extremely fast
+- Easy to explain
+- Easy to update
+
+Limitations:
+
+- Cannot detect unknown fraud patterns.
+
+---
+
+## 4. ML Inference Service
+
+Machine learning detects subtle patterns missed by static rules.
+
+Typical features include:
+
+- Transaction amount deviation
+- Merchant category
+- Device fingerprint
+- Time of day
+- User spending habits
+- Geo-location changes
+- IP reputation
+- Historical fraud rate
+
+Common models:
+
+- Gradient Boosted Trees (XGBoost, LightGBM)
+- Random Forest
+- Deep Neural Networks
+- Graph Neural Networks (for fraud rings)
+
+Models are loaded into memory to avoid network latency.
+
+---
+
+## 5. Risk Scoring Engine
+
+Combines rule-based and ML outputs into a single score.
+
+Example:
+
+```text
+Risk Score =
+0.6 × ML Score
++ 0.3 × Rule Score
++ 0.1 × Historical Reputation
+```
+
+Decision thresholds:
+
+| Score  | Action                |
+| ------ | --------------------- |
+| 0–30   | Approve               |
+| 31–70  | Challenge (OTP / MFA) |
+| 71–100 | Reject                |
+
+Thresholds can vary by merchant, geography, or transaction type.
+
+---
+
+## 6. Decision Engine
+
+Returns one of:
+
+- **Approve** – transaction proceeds.
+- **Reject** – transaction blocked.
+- **Review** – manual review or step-up authentication.
+
+Every decision is logged with the contributing rules and model outputs for auditing.
+
+---
+
+# Data Flow
+
+```text
+Receive Transaction
+        |
+Validate Request
+        |
+Retrieve Historical Features
+        |
+Execute Rule Engine
+        |
+Run ML Model
+        |
+Compute Risk Score
+        |
+Decision Engine
+        |
+Approve / Reject / Review
+```
+
+Target processing time:
+
+**20–50 ms**
+
+---
+
+# Deep Design Considerations
+
+## 1. Low-Latency Feature Access
+
+Avoid database reads during the critical path.
+
+Keep frequently accessed features in memory:
+
+- Recent transactions
+- Device history
+- Velocity counters
+- User profiles
+
+---
+
+## 2. Streaming Feature Updates
+
+Recent behavior is often more predictive than long-term history.
+
+Example:
+
+```text
+Transaction A
+
+↓
+
+Kafka
+
+↓
+
+Feature Updater
+
+↓
+
+Redis
+
+↓
+
+Next transaction uses updated features
+```
+
+This enables near real-time behavioral analysis.
+
+---
+
+## 3. Velocity Detection
+
+Track rapid activity using sliding windows.
+
+Examples:
+
+- Transactions per minute
+- Spending in last hour
+- Login attempts
+- Different cards from same IP
+- Different accounts on same device
+
+Use windowed aggregations in stream processors.
+
+---
+
+## 4. Device Fingerprinting
+
+Identify devices using:
+
+- Browser attributes
+- OS version
+- Screen resolution
+- Installed fonts
+- Hardware identifiers (where permitted)
+- Mobile device identifiers
+
+Useful for detecting account takeovers and device spoofing.
+
+---
+
+## 5. Graph-Based Fraud Detection
+
+Represent relationships as a graph:
+
+```text
+User
+  |
+Device
+  |
+Card
+  |
+Merchant
+```
+
+Clusters with excessive shared devices, IPs, or payment methods often indicate organized fraud.
+
+Graph databases or graph analytics engines can uncover fraud rings offline or near real time.
+
+---
+
+## 6. Adaptive Rules
+
+Fraud patterns evolve quickly.
+
+Rules should be:
+
+- Configurable
+- Versioned
+- Deployable without service restarts
+- Gradually rolled out (canary deployments)
+
+---
+
+## 7. Asynchronous Analytics
+
+Do not block transaction processing for:
+
+- Reporting
+- Dashboards
+- Model retraining
+- Chargeback analysis
+- Fraud investigations
+
+Instead, publish events to Kafka/Pulsar for downstream consumers.
+
+---
+
+# Capacity / Sizing
+
+Assume:
+
+- **100,000 transactions/sec**
+- Request size: **2 KB**
+- Decision latency: **<50 ms**
+
+Incoming traffic:
+
+```text
+100,000 × 2 KB ≈ 200 MB/sec
+```
+
+If one fraud server handles:
+
+```text
+5,000 TPS
+```
+
+Servers required:
+
+```text
+100,000 / 5,000 = 20 servers
+```
+
+(plus redundancy for failover and peak traffic).
+
+---
+
+# Security / Observability
+
+## Security
+
+- TLS for all communication
+- Authentication between services
+- Encryption of sensitive data at rest
+- PCI DSS compliance for payment systems
+- Tokenization of card numbers
+- Immutable audit logs
+- Fine-grained access control
+
+## Observability
+
+Monitor:
+
+- Decision latency (P50/P95/P99)
+- Fraud detection rate
+- False positive rate
+- False negative rate
+- Rule hit frequency
+- ML inference latency
+- Feature store latency
+- Transactions per second
+- Error rates
+- Model drift
+- Cache hit ratio
+
+Distributed tracing helps isolate latency bottlenecks across the fraud pipeline.
+
+---
+
+# Trade-offs
+
+| Decision                | Pros                       | Cons                                          |
+| ----------------------- | -------------------------- | --------------------------------------------- |
+| Rule engine             | Fast, explainable          | Limited to known patterns                     |
+| ML models               | Detect unknown fraud       | Harder to explain, requires retraining        |
+| In-memory feature store | Very low latency           | Higher infrastructure cost                    |
+| Local model inference   | Eliminates network latency | More complex model deployment                 |
+| Streaming updates       | Fresh behavioral features  | Operational complexity                        |
+| Graph analytics         | Detects fraud rings        | Resource-intensive, often not fully real time |
+
+---
+
+# Interview-ready summary
+
+> "A real-time fraud detection system processes every transaction through a low-latency pipeline that combines in-memory feature retrieval, deterministic rule evaluation, and local ML inference to produce a risk score within tens of milliseconds. The system keeps the synchronous path lightweight while using streaming platforms for analytics, feature updates, and model retraining. It scales horizontally, supports evolving fraud rules, and balances fraud detection accuracy with a low false positive rate through configurable decision thresholds and continuous monitoring."
+
 ## Question 3. What is Lambda Architecture in data processing?
 
 ## Question 4. How would you design an append-only log store?

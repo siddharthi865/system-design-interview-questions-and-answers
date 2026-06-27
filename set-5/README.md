@@ -431,6 +431,368 @@ Tools:
 
 ## Question 2. What are the challenges in designing distributed systems?
 
+# Direct answer
+
+Designing distributed systems is challenging because components run on multiple machines connected over unreliable networks. Unlike a single-machine application, you must handle **network failures, partial failures, consistency issues, scalability, concurrency, latency, fault tolerance, and operational complexity** while still providing a reliable user experience.
+
+---
+
+# Key Challenges in Distributed Systems
+
+## 1. Network Failures
+
+In a distributed system, machines communicate over a network, and networks are inherently unreliable.
+
+Possible issues:
+
+- Packet loss
+- Network partitions
+- High latency
+- Connection timeouts
+
+Example:
+
+```text
+Service A ----X---- Service B
+```
+
+A doesn't know whether:
+
+- B never received the request
+- B processed it but response was lost
+- B is down
+
+This uncertainty makes distributed systems difficult.
+
+---
+
+## 2. Partial Failures
+
+In a monolithic application:
+
+```text
+Server Down = System Down
+```
+
+In distributed systems:
+
+```text
+Service A -> Service B -> Service C
+```
+
+Only Service C may fail while A and B continue running.
+
+Challenges:
+
+- Detecting failures
+- Retrying safely
+- Preventing cascading failures
+
+Common solutions:
+
+- Timeouts
+- Retries
+- Circuit breakers
+- Fallback mechanisms
+
+---
+
+## 3. Data Consistency
+
+Multiple copies of data may exist across nodes.
+
+Example:
+
+```text
+Primary DB
+   |
+Replication
+   |
+Replica DB
+```
+
+User updates profile:
+
+```text
+Write -> Primary
+```
+
+Immediately after:
+
+```text
+Read -> Replica
+```
+
+Replica may not have received the update yet.
+
+Result:
+
+```text
+User sees stale data
+```
+
+Key challenge:
+
+- Balancing consistency and availability
+
+---
+
+## 4. CAP Theorem
+
+When a network partition occurs, a distributed system can choose only two of:
+
+| Property            | Meaning                        |
+| ------------------- | ------------------------------ |
+| Consistency         | All nodes see same data        |
+| Availability        | Every request gets a response  |
+| Partition Tolerance | System survives network splits |
+
+Since partition tolerance is mandatory in distributed systems, systems often trade off between:
+
+- Consistency (CP)
+- Availability (AP)
+
+---
+
+## 5. Concurrency and Race Conditions
+
+Many users may update the same data simultaneously.
+
+Example:
+
+```text
+Account Balance = $100
+```
+
+Two withdrawals:
+
+```text
+User A -> Withdraw $50
+User B -> Withdraw $70
+```
+
+Without proper coordination:
+
+```text
+Final Balance = Incorrect
+```
+
+Solutions:
+
+- Transactions
+- Optimistic locking
+- Distributed locks
+- Versioning
+
+---
+
+## 6. Scalability
+
+As traffic grows:
+
+```text
+100 Users
+↓
+10 Million Users
+```
+
+Challenges:
+
+- Database bottlenecks
+- Hot partitions
+- Increased network traffic
+- Uneven load distribution
+
+Solutions:
+
+- Load balancing
+- Sharding
+- Caching
+- Horizontal scaling
+
+---
+
+## 7. Latency
+
+Cross-machine communication is much slower than in-memory operations.
+
+Approximate comparison:
+
+| Operation    | Time                |
+| ------------ | ------------------- |
+| CPU Cache    | Nanoseconds         |
+| RAM Access   | Tens of nanoseconds |
+| SSD Access   | Microseconds        |
+| Network Call | Milliseconds        |
+
+A request touching multiple services:
+
+```text
+API
+ ├─ User Service
+ ├─ Order Service
+ └─ Payment Service
+```
+
+can accumulate latency quickly.
+
+---
+
+## 8. Distributed Transactions
+
+Maintaining ACID guarantees across multiple services is difficult.
+
+Example:
+
+```text
+Order Service
+Payment Service
+Inventory Service
+```
+
+Scenario:
+
+```text
+Payment Success
+Inventory Update Failed
+```
+
+System enters an inconsistent state.
+
+Solutions:
+
+- Saga Pattern
+- Event-driven workflows
+- Compensation transactions
+
+---
+
+## 9. Clock Synchronization
+
+Each machine has its own clock.
+
+```text
+Server A: 10:00:01
+Server B: 09:59:58
+```
+
+Problems:
+
+- Event ordering
+- Conflict resolution
+- Distributed logging
+
+Solutions:
+
+- NTP
+- Logical clocks
+- Vector clocks
+- Hybrid clocks
+
+---
+
+## 10. Service Discovery
+
+In dynamic environments:
+
+```text
+Service Instances:
+10 -> 100 -> 500
+```
+
+IP addresses change frequently.
+
+Questions:
+
+- How do services find each other?
+- How do they know healthy instances?
+
+Solutions:
+
+- Service registry
+- DNS-based discovery
+- Health checks
+
+Examples:
+
+- Consul
+- Eureka
+- Kubernetes Service Discovery
+
+---
+
+## 11. Fault Tolerance
+
+Machines fail regularly at scale.
+
+Failures include:
+
+- Disk crashes
+- Server failures
+- Datacenter outages
+- Network failures
+
+Need:
+
+- Replication
+- Automatic failover
+- Redundancy
+- Disaster recovery
+
+---
+
+## 12. Observability and Debugging
+
+Debugging is harder when a request travels through many services.
+
+Example:
+
+```text
+Client
+  |
+API Gateway
+  |
+User Service
+  |
+Order Service
+  |
+Payment Service
+```
+
+A single user request may generate dozens of logs.
+
+Need:
+
+- Centralized logging
+- Metrics
+- Distributed tracing
+
+Tools:
+
+- ELK Stack
+- Prometheus
+- Grafana
+- OpenTelemetry
+- Jaeger
+
+---
+
+# Trade-offs
+
+| Challenge                         | Common Trade-off                 |
+| --------------------------------- | -------------------------------- |
+| Consistency vs Availability       | CAP theorem                      |
+| Latency vs Accuracy               | Cache freshness                  |
+| Throughput vs Durability          | Async processing                 |
+| Simplicity vs Scalability         | Monolith vs Microservices        |
+| Strong Consistency vs Performance | Synchronous vs Async replication |
+
+---
+
+# Interview-ready Summary
+
+"The biggest challenges in distributed systems are handling unreliable networks, partial failures, data consistency, concurrency, scalability, latency, and fault tolerance. Since components run on different machines, communication can fail, data can become inconsistent, and services can experience independent failures. A good distributed system uses replication, caching, load balancing, retries, service discovery, observability, and carefully chosen consistency models to balance reliability, performance, and scalability."
+
 ## Question 3. What is fault tolerance in system design?
 
 ## Question 4. What are leader election algorithms (like Raft, Paxos)?

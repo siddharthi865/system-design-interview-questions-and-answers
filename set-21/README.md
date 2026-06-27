@@ -213,6 +213,184 @@ A distributed system is composed of multiple independent nodes connected via a c
 
 ## Question 2. What is a service mesh?
 
+## **Direct answer**
+
+A **service mesh** is an infrastructure layer that manages **service-to-service communication** in a distributed system, handling concerns like **traffic routing, security, observability, and reliability** without requiring changes to application code.
+
+It typically works by deploying a **sidecar proxy alongside each service instance**, which intercepts all network traffic.
+
+---
+
+## **What problem does a service mesh solve?**
+
+In microservices, every service must handle:
+
+- Retry logic
+- Timeouts
+- mTLS encryption
+- Load balancing
+- Circuit breaking
+- Observability (metrics, tracing)
+
+Without a service mesh:
+
+> Each service re-implements these concerns → duplicated logic + inconsistent behavior.
+
+A service mesh centralizes these concerns at the infrastructure level.
+
+---
+
+## **High-level architecture**
+
+```
+        Control Plane
+   (config, policies, routing)
+            |
+--------------------------------
+|              |               |
+Sidecar     Sidecar        Sidecar
+Proxy       Proxy          Proxy
+|             |              |
+Service A   Service B    Service C
+```
+
+### Key idea:
+
+Each service talks through a **sidecar proxy**, not directly to other services.
+
+---
+
+## **Core components**
+
+### 1. **Data Plane (Proxies)**
+
+- Runs next to each service instance
+- Intercepts all inbound/outbound traffic
+- Examples: Envoy proxy
+
+Responsibilities:
+
+- Load balancing
+- Retry, timeout handling
+- Traffic routing
+- mTLS encryption/decryption
+
+---
+
+### 2. **Control Plane**
+
+- Central management layer
+- Configures all proxies
+- Pushes policies and routing rules
+
+Responsibilities:
+
+- Service discovery rules
+- Traffic policies (A/B testing, canary releases)
+- Security policies (mTLS, auth rules)
+
+Examples:
+
+- Istio control plane
+- Linkerd control plane
+
+---
+
+## **Key capabilities of a service mesh**
+
+### 1. **Traffic management**
+
+- Load balancing
+- Canary deployments
+- Blue/green deployments
+- Traffic splitting (e.g., 90% v1, 10% v2)
+
+---
+
+### 2. **Security (Zero Trust)**
+
+- Automatic **mutual TLS (mTLS)** between services
+- Service identity management
+- Fine-grained authorization policies
+
+---
+
+### 3. **Observability**
+
+- Distributed tracing (request path across services)
+- Metrics (latency, error rate, throughput)
+- Logs at proxy level
+
+---
+
+### 4. **Resilience**
+
+- Retries with backoff
+- Circuit breaking
+- Fault injection (for testing failures)
+
+---
+
+## **Example flow**
+
+Request from Service A → Service B:
+
+1. A sends request
+2. Sidecar proxy (A) intercepts it
+3. Proxy encrypts request (mTLS)
+4. Routes it based on policy (e.g., version v2 of Service B)
+5. Sidecar proxy (B) receives request
+6. Decrypts and forwards to Service B
+
+---
+
+## **Service mesh vs API Gateway**
+
+| Feature  | Service Mesh                | API Gateway                  |
+| -------- | --------------------------- | ---------------------------- |
+| Scope    | Internal service-to-service | External client-to-service   |
+| Layer    | Infrastructure sidecars     | Edge layer                   |
+| Purpose  | Microservice communication  | Client access control        |
+| Examples | Istio, Linkerd              | Kong, NGINX, AWS API Gateway |
+
+👉 Simple way to remember:
+
+- API Gateway = entry door to system
+- Service Mesh = internal plumbing
+
+---
+
+## **Trade-offs**
+
+| Benefit                           | Cost                                               |
+| --------------------------------- | -------------------------------------------------- |
+| Centralized traffic control       | Added infrastructure complexity                    |
+| Strong security (mTLS everywhere) | Performance overhead (proxy hop)                   |
+| Better observability              | Operational overhead                               |
+| No code changes needed            | Debugging becomes harder (extra abstraction layer) |
+
+---
+
+## **When to use a service mesh**
+
+Use it when:
+
+- You have **large microservice architecture**
+- Need **zero-trust security**
+- Require **advanced traffic control**
+- Need **deep observability across services**
+
+Avoid it when:
+
+- System is small (monolith or few services)
+- Team cannot handle operational complexity
+
+---
+
+## **Interview-ready summary**
+
+A service mesh is an infrastructure layer that manages inter-service communication in microservices architectures. It uses sidecar proxies and a control plane to handle networking concerns like routing, security (mTLS), retries, and observability in a centralized way, allowing application services to remain focused purely on business logic while improving consistency and reliability across the system.
+
 ## Question 3. What is a monolithic kernel vs. microkernel in system design?
 
 ## Question 4. How do you ensure API compatibility across versions?

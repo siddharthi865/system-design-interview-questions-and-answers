@@ -600,6 +600,263 @@ Monitor:
 
 ## Question 2. What is a service mesh?
 
+# Direct answer
+
+A **service mesh** is an infrastructure layer that manages **service-to-service communication** in a microservices architecture. Instead of each service implementing networking features like retries, load balancing, encryption, authentication, and observability, the service mesh provides these capabilities transparently through **sidecar proxies** or similar data-plane components.
+
+In simple terms:
+
+> **Application code handles business logic, while the service mesh handles communication between services.**
+
+---
+
+# Why do we need a service mesh?
+
+As the number of microservices grows, each service must communicate reliably and securely with many others.
+
+Without a service mesh, every service needs to implement:
+
+- Service discovery
+- Load balancing
+- Retry logic
+- Timeouts
+- Circuit breakers
+- Mutual TLS (mTLS)
+- Metrics and tracing
+- Traffic routing
+
+This leads to duplicated code and inconsistent behavior.
+
+A service mesh centralizes these networking concerns.
+
+---
+
+# High-Level Architecture
+
+```text
+               Control Plane
+      (Configuration & Policy)
+                │
+        --------------------
+        │                  │
+     Proxy A            Proxy B
+        │                  │
+   Service A  ─────────► Service B
+        ▲                  ▲
+   All traffic flows through proxies
+```
+
+There are two main components:
+
+### 1. Data Plane
+
+The data plane consists of **sidecar proxies** deployed alongside each service.
+
+Responsibilities:
+
+- Route requests
+- Load balance traffic
+- Encrypt communication (mTLS)
+- Retry failed requests
+- Collect metrics
+- Generate distributed traces
+- Enforce policies
+
+The application communicates with its local proxy, which then communicates with the destination proxy.
+
+---
+
+### 2. Control Plane
+
+The control plane manages all proxies.
+
+Responsibilities:
+
+- Configure routing rules
+- Push security policies
+- Manage certificates
+- Monitor proxy health
+- Control traffic distribution
+
+The control plane does **not** handle application traffic directly.
+
+---
+
+# Request Flow
+
+```text
+Client
+
+↓
+
+Service A
+
+↓
+
+Sidecar Proxy A
+
+↓
+
+Network
+
+↓
+
+Sidecar Proxy B
+
+↓
+
+Service B
+```
+
+Neither service needs to know about:
+
+- TLS
+- Retries
+- Load balancing
+- Observability
+
+The proxies handle these concerns automatically.
+
+---
+
+# Features Provided by a Service Mesh
+
+| Feature           | Description                                 |
+| ----------------- | ------------------------------------------- |
+| Service discovery | Finds healthy service instances             |
+| Load balancing    | Distributes requests across instances       |
+| Retries           | Retries transient failures automatically    |
+| Timeouts          | Prevents hanging requests                   |
+| Circuit breakers  | Stops sending traffic to unhealthy services |
+| mTLS              | Encrypts service-to-service communication   |
+| Authentication    | Verifies service identity                   |
+| Authorization     | Enforces communication policies             |
+| Traffic routing   | Canary, blue-green, A/B deployments         |
+| Observability     | Metrics, logs, and distributed tracing      |
+
+---
+
+# Example: Retry Without a Service Mesh
+
+Without a service mesh:
+
+```javascript
+async function callPayment() {
+  for (let i = 0; i < 3; i++) {
+    try {
+      return await paymentService();
+    } catch (e) {}
+  }
+}
+```
+
+Every service may implement retries differently.
+
+With a service mesh:
+
+- The application makes a single request.
+- The proxy performs retries according to centralized policy.
+- Retry behavior is consistent across all services.
+
+---
+
+# Traffic Management Example
+
+Suppose you're deploying a new version of a service.
+
+Instead of sending all traffic to the new version immediately:
+
+```text
+90% → Version 1
+10% → Version 2
+```
+
+If Version 2 performs well:
+
+```text
+50% → Version 2
+```
+
+Finally:
+
+```text
+100% → Version 2
+```
+
+This enables safer canary deployments without modifying application code.
+
+---
+
+# Security
+
+A service mesh commonly provides **mutual TLS (mTLS)**:
+
+```text
+Service A
+
+⇄ Encrypted + Authenticated ⇄
+
+Service B
+```
+
+Benefits:
+
+- Encryption in transit
+- Strong service identity
+- Automatic certificate rotation
+- Protection against impersonation
+
+---
+
+# Observability
+
+Because every request passes through proxies, the mesh can automatically collect:
+
+- Request latency
+- Error rates
+- Request volume
+- Retries
+- Timeouts
+- Distributed traces
+- Service dependency graphs
+
+This provides visibility without adding instrumentation for every networking concern.
+
+---
+
+# Trade-offs
+
+| Advantages                            | Disadvantages                      |
+| ------------------------------------- | ---------------------------------- |
+| Removes networking code from services | Additional operational complexity  |
+| Consistent retries and timeouts       | Extra CPU and memory for proxies   |
+| Automatic mTLS                        | Slight increase in request latency |
+| Rich observability                    | Learning curve for teams           |
+| Advanced traffic management           | More infrastructure to manage      |
+
+---
+
+# When should you use a service mesh?
+
+A service mesh is most beneficial when:
+
+- You have **dozens or hundreds of microservices**.
+- Security between services is critical.
+- You need consistent traffic policies and observability.
+- You perform frequent canary or blue-green deployments.
+
+It is often **not** worth the complexity for:
+
+- Small systems with only a few services.
+- Monolithic applications.
+- Simple microservice deployments where basic API gateway and load balancing are sufficient.
+
+---
+
+# Interview-ready summary
+
+> "A service mesh is an infrastructure layer that manages service-to-service communication in a microservices architecture. It uses sidecar proxies (data plane) controlled by a centralized control plane to provide capabilities such as service discovery, load balancing, retries, circuit breaking, mTLS, traffic routing, and observability without requiring changes to application code. This lets developers focus on business logic while the mesh consistently handles networking and security concerns across the system."
+
 ## Question 3. What is an RPC (Remote Procedure Call)?
 
 ## Question 4. What is the API Gateway pattern?

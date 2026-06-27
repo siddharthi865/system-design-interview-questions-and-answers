@@ -281,6 +281,288 @@ A scalable API rate quota system is typically implemented at the API gateway lev
 
 ## Question 2. How do you design a reliable multicast system?
 
+## Direct answer
+
+A reliable multicast system ensures that a message sent by one producer is delivered to **all intended receivers correctly, exactly once (or at least once depending on semantics), in a consistent order, despite failures, network loss, or partitions**. The core challenge is combining **fan-out scalability (multicast)** with **reliability guarantees (ACK/NAK, retransmission, ordering, and fault tolerance)**.
+
+The most common real-world approach is:
+
+> **Use a brokered or tree-based multicast + sequence numbering + receiver-driven or sender-driven retransmission + membership management.**
+
+---
+
+## Requirements / problem framing
+
+### Functional requirements
+
+- One-to-many message delivery (publisher → many subscribers)
+- Guaranteed delivery semantics:
+  - At-least-once (common)
+  - Exactly-once (hard, usually application-level dedupe)
+
+- Optional ordering:
+  - FIFO (per sender)
+  - Total order (stronger, more expensive)
+
+- Dynamic group membership (join/leave)
+- Retransmission of lost messages
+
+### Non-functional requirements
+
+- High scalability (thousands/millions of receivers)
+- Low latency fan-out
+- Fault tolerance (node + network failure)
+- Backpressure handling (slow consumers)
+- Efficient bandwidth usage (avoid N copies per receiver)
+
+---
+
+## High-level architecture
+
+There are three common architectural patterns:
+
+### 1. Broker-based multicast (most practical)
+
+```text
+        Publisher
+            |
+            v
+     +----------------+
+     |  Message Broker|
+     | (Kafka/NATS)   |
+     +----------------+
+       /     |      \
+      v      v       v
+  Consumer Consumer Consumer
+```
+
+- Broker handles replication and delivery guarantees
+- Consumers pull messages (simplifies reliability)
+- Used in Kafka-like systems
+
+---
+
+### 2. Tree-based multicast (network efficient)
+
+```text
+            Root
+           /    \
+        Node     Node
+       /   \       \
+   Leaf   Leaf     Leaf
+```
+
+- Messages forwarded down a spanning tree
+- Reduces sender load from O(N) → O(log N)
+
+---
+
+### 3. Overlay multicast (hybrid peer-assisted)
+
+- Nodes help forward messages (P2P-style)
+- Used in WebRTC / live streaming systems
+
+---
+
+## Core design components
+
+### 1. Message identification
+
+Each message must include:
+
+- `groupId`
+- `sequenceNumber`
+- `timestamp`
+- `producerId`
+
+This enables:
+
+- Deduplication
+- Ordering
+- Gap detection
+
+---
+
+### 2. Group membership service
+
+We need to know:
+
+- Who is in the multicast group?
+- How to update membership safely?
+
+Options:
+
+- Central registry (simple, but bottleneck)
+- Distributed coordination (ZooKeeper / etcd-style)
+
+---
+
+### 3. Reliable delivery mechanism
+
+#### Option A: ACK-based (sender-driven reliability)
+
+- Sender tracks all receivers
+- Receivers ACK received messages
+- Sender retransmits missing messages
+
+**Pros**
+
+- Strong guarantees
+
+**Cons**
+
+- Doesn’t scale well (O(N) ACK overhead)
+
+---
+
+#### Option B: NAK-based (receiver-driven reliability) ⭐ preferred
+
+- Sender does NOT track every receiver
+- Receiver detects missing sequence numbers
+- Receiver requests retransmission
+
+```text
+Sender → multicast message(seq=10)
+Receiver A gets 10
+Receiver B misses 10 → sends NAK(10)
+Sender retransmits 10
+```
+
+**Pros**
+
+- Much more scalable
+- Lower overhead
+
+---
+
+### 4. Ordering guarantees
+
+#### FIFO ordering
+
+- Sequence numbers per sender
+- Receiver buffers out-of-order messages
+
+#### Total ordering (harder)
+
+Options:
+
+- Central sequencer
+- Distributed consensus (Raft-like ordering service)
+
+Used in:
+
+- financial systems
+- replicated state machines
+
+---
+
+### 5. Message buffering & retransmission store
+
+Sender or broker must retain:
+
+- last N messages (sliding window buffer)
+- configurable retention time
+
+Used for:
+
+- replay on NAK
+- slow consumers
+- recovery after failure
+
+---
+
+### 6. Flow control / backpressure
+
+Without control:
+
+- slow consumer causes memory blowup
+
+Solutions:
+
+- consumer lag tracking
+- drop policies (for non-critical streams)
+- rate limiting per subscriber
+- window-based flow control
+
+---
+
+## Deep design considerations
+
+### 1. Scalability bottleneck problem
+
+If sender directly sends to all receivers:
+
+- O(N) fanout cost
+- network explosion
+
+Fix:
+
+- broker fanout OR tree-based forwarding
+
+---
+
+### 2. Failure handling
+
+| Failure type   | Handling                              |
+| -------------- | ------------------------------------- |
+| Receiver crash | rejoin + replay from last offset      |
+| Sender crash   | leader election + state recovery      |
+| Network loss   | NAK + retransmission                  |
+| Partition      | temporary divergence + reconciliation |
+
+---
+
+### 3. Exactly-once semantics (hard problem)
+
+Typical approach:
+
+- at-least-once delivery
+- receiver-side dedup using message IDs
+
+True exactly-once requires:
+
+- transactional log + idempotent processing
+
+---
+
+### 4. Large-scale multicast optimization
+
+Techniques:
+
+- batching messages
+- compression
+- delta encoding (for state sync)
+- hierarchical fanout (region → edge nodes → clients)
+
+---
+
+### 5. Hybrid real-world design (what companies use)
+
+Most production systems combine:
+
+- Kafka-like log for durability
+- Pub/sub broker for fanout
+- consumer offsets for reliability
+- optional push layer for low latency
+
+---
+
+## Trade-offs
+
+| Design         | Pros               | Cons                     | Use case                |
+| -------------- | ------------------ | ------------------------ | ----------------------- |
+| ACK-based      | Strong reliability | Not scalable             | small groups            |
+| NAK-based      | scalable           | delayed detection        | large multicast         |
+| Broker-based   | simple, robust     | latency overhead         | most production systems |
+| Tree-based     | low latency        | complex failure recovery | streaming systems       |
+| Total ordering | strict consistency | slow                     | financial systems       |
+
+---
+
+## Interview-ready summary
+
+A reliable multicast system ensures correct and ordered delivery of messages to all group members despite failures. The key design challenge is scalable reliability. In practice, systems use a broker-based or tree-based architecture with sequence numbering, sliding-window buffering, and either ACK or NAK-based retransmission. Most scalable designs prefer NAK-based recovery with message retention, combined with deduplication and consumer-side ordering. Trade-offs revolve around scalability vs strict ordering guarantees vs complexity.
+
 ## Question 3. How do you design an email spam filtering system?
 
 ## Question 4. What is a relay server?

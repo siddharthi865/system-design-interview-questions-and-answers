@@ -260,6 +260,530 @@ TKN_98AF72CD
 
 ## Question 2. How do you design a secure session management system?
 
+# Direct answer
+
+A **secure session management system** authenticates users, issues secure session tokens, validates them on every request, supports session expiration and revocation, and protects against attacks such as session hijacking, fixation, replay, and CSRF.
+
+In a system design interview, focus on:
+
+- Secure authentication
+- Secure session/token generation
+- Session storage
+- Session validation
+- Expiration and renewal
+- Logout and revocation
+- Scalability
+- Security best practices
+
+---
+
+# Requirements / Problem framing
+
+## Functional requirements
+
+- User login
+- Create authenticated session
+- Validate session on every request
+- Logout from current or all devices
+- Session expiration
+- Remember-me support (optional)
+- Support multiple concurrent devices
+
+## Non-functional requirements
+
+- High availability
+- Low latency
+- Horizontal scalability
+- Strong security
+- Easy revocation
+- Auditability
+
+---
+
+# High-level architecture
+
+```text
+                +----------------+
+                |     Client     |
+                +-------+--------+
+                        |
+                 Login Request
+                        |
+                +-------v--------+
+                | Authentication |
+                |    Service     |
+                +-------+--------+
+                        |
+            Verify username/password
+                        |
+                +-------v--------+
+                | User Database  |
+                +----------------+
+
+After successful login
+
+                Generate Session ID
+                        |
+                Store Session
+                        |
+                +-------v--------+
+                | Redis / Session|
+                |     Store      |
+                +-------+--------+
+                        |
+               Return Secure Cookie
+                        |
+                Client stores cookie
+                        |
+            Every authenticated request
+                        |
+                +-------v--------+
+                | API Gateway    |
+                +-------+--------+
+                        |
+             Validate Session ID
+                        |
+                +-------v--------+
+                | Session Store  |
+                +----------------+
+```
+
+---
+
+# Session lifecycle
+
+## Step 1: Login
+
+User submits:
+
+```text
+Email
+Password
+```
+
+Authentication service:
+
+- verifies credentials
+- checks MFA (if enabled)
+- generates session ID
+- stores session
+
+Example:
+
+```text
+Session ID:
+8f93ab18d9ef...
+```
+
+---
+
+## Step 2: Store session
+
+Store:
+
+```text
+SessionID
+UserID
+CreatedTime
+LastAccessTime
+ExpiryTime
+DeviceInfo
+IP (optional)
+UserAgent
+RefreshToken(optional)
+```
+
+Example:
+
+```text
+Session {
+    sessionId
+    userId
+    createdAt
+    expiresAt
+    lastSeen
+}
+```
+
+Redis is commonly used because:
+
+- fast lookup
+- TTL support
+- distributed
+- replicated
+
+---
+
+## Step 3: Return cookie
+
+Never expose session IDs in URLs.
+
+Return:
+
+```http
+Set-Cookie:
+
+session=abc123
+
+HttpOnly
+Secure
+SameSite=Lax
+```
+
+Security flags:
+
+| Flag     | Purpose                                        |
+| -------- | ---------------------------------------------- |
+| HttpOnly | Prevent JavaScript access (reduces XSS impact) |
+| Secure   | HTTPS only                                     |
+| SameSite | Helps prevent CSRF                             |
+
+---
+
+## Step 4: Validate session
+
+Every request:
+
+```text
+Client
+    |
+Cookie
+    |
+API
+    |
+Redis Lookup
+    |
+Valid?
+```
+
+If valid:
+
+- load user
+- continue request
+
+Else:
+
+```text
+401 Unauthorized
+```
+
+---
+
+# Session storage options
+
+## Option 1: Server-side sessions (recommended)
+
+```text
+Client
+     |
+Session ID
+     |
+Server
+     |
+Redis
+```
+
+Advantages
+
+- easy logout
+- immediate revocation
+- session tracking
+- simple expiration
+
+Disadvantages
+
+- requires distributed cache
+
+---
+
+## Option 2: Stateless sessions using tokens
+
+Store signed tokens (e.g., JWTs) on the client.
+
+Advantages
+
+- no session lookup
+- horizontally scalable
+- good for microservices
+
+Disadvantages
+
+- difficult to revoke before expiry
+- larger attack surface if leaked
+- often paired with short-lived access tokens and refresh tokens
+
+---
+
+# Session expiration
+
+Two common expiration strategies:
+
+### Absolute expiration
+
+Example:
+
+```text
+Expires after 8 hours
+```
+
+Even if active.
+
+---
+
+### Idle timeout
+
+Example:
+
+```text
+Logout after 30 minutes of inactivity
+```
+
+Reset:
+
+```text
+lastSeen = currentTime
+```
+
+Many systems combine both:
+
+```text
+Absolute: 24 hours
+
+Idle: 30 minutes
+```
+
+---
+
+# Session renewal
+
+Instead of forcing users to log in frequently:
+
+```text
+Access Token
+
+15 min
+```
+
+Refresh token:
+
+```text
+30 days
+```
+
+Flow:
+
+```text
+Expired Access Token
+
+↓
+
+Refresh Token
+
+↓
+
+New Access Token
+
+↓
+
+Continue
+```
+
+This limits the impact of stolen access tokens.
+
+---
+
+# Logout
+
+User clicks Logout:
+
+```text
+Delete session from Redis
+```
+
+Future requests:
+
+```text
+Invalid session
+
+↓
+
+401
+```
+
+For "Logout from all devices":
+
+```text
+Delete all sessions
+
+WHERE UserID = X
+```
+
+---
+
+# Defending against common attacks
+
+## 1. Session hijacking
+
+Attack:
+
+Attacker steals the session cookie.
+
+Mitigations:
+
+- HTTPS everywhere
+- `Secure` cookies
+- `HttpOnly`
+- Short session lifetime
+- Rotate session IDs after login or privilege changes
+- Detect unusual activity (e.g., impossible travel)
+
+---
+
+## 2. Session fixation
+
+Attack:
+
+Attacker forces the victim to use a known session ID.
+
+Mitigation:
+
+Always generate a **new** session ID after successful authentication.
+
+```text
+Old Session
+
+↓
+
+Login
+
+↓
+
+New Session ID
+```
+
+---
+
+## 3. Cross-Site Scripting (XSS)
+
+Attack:
+
+Malicious JavaScript steals cookies.
+
+Mitigations:
+
+- `HttpOnly` cookies
+- Output encoding
+- Content Security Policy (CSP)
+- Input validation
+
+---
+
+## 4. Cross-Site Request Forgery (CSRF)
+
+Attack:
+
+A malicious website causes a victim's browser to perform unwanted actions.
+
+Mitigations:
+
+- `SameSite=Lax` or `SameSite=Strict`
+- CSRF tokens for state-changing requests
+- Validate `Origin` or `Referer` headers where appropriate
+
+---
+
+## 5. Replay attacks
+
+Attack:
+
+Captured requests are replayed.
+
+Mitigations:
+
+- HTTPS
+- Short-lived tokens
+- Nonces or request signatures for high-risk operations
+
+---
+
+# Scaling the session system
+
+## Redis Cluster
+
+```text
+         API Servers
+
+        /     |      \
+
+     Redis Cluster
+```
+
+Benefits:
+
+- horizontal scaling
+- replication
+- automatic failover
+- TTL support
+
+---
+
+## Load balancing
+
+Use a load balancer in front of stateless application servers.
+
+Since sessions are stored centrally:
+
+```text
+Any server
+
+↓
+
+Redis
+```
+
+No sticky sessions are required, making scaling and failover simpler.
+
+---
+
+# Security / observability
+
+**Authentication & authorization**
+
+- Use strong password hashing (e.g., bcrypt or Argon2).
+- Support MFA for sensitive accounts.
+- Validate user permissions on every protected request.
+
+**Monitoring**
+
+- Track active sessions per user.
+- Detect repeated failed logins.
+- Alert on abnormal session creation rates or suspicious geographic changes.
+- Log login, logout, session renewal, and revocation events with audit trails.
+
+**Data protection**
+
+- Encrypt data in transit with HTTPS/TLS.
+- Encrypt sensitive session metadata at rest if required.
+- Never store passwords or sensitive secrets in session data.
+
+---
+
+# Trade-offs
+
+| Approach                    | Advantages                                | Disadvantages                        |
+| --------------------------- | ----------------------------------------- | ------------------------------------ |
+| Server-side sessions        | Easy revocation, logout, session tracking | Requires shared session store        |
+| JWT-only                    | Stateless, no database lookup             | Hard to revoke before expiry         |
+| Access + Refresh Tokens     | Good security and scalability balance     | More implementation complexity       |
+| Sticky Sessions             | Simple to implement initially             | Poor scalability and failover        |
+| Central Redis Session Store | Highly scalable, no sticky sessions       | Adds operational dependency on Redis |
+
+---
+
+# Interview-ready summary
+
+> "I would authenticate the user, generate a cryptographically secure random session ID, and store the session in a distributed store like Redis with a TTL. The client receives only the session ID in an `HttpOnly`, `Secure`, and `SameSite` cookie. Every request validates the session against Redis. I'd implement idle and absolute expiration, rotate session IDs after login, support immediate logout by deleting sessions, and defend against session hijacking, fixation, XSS, and CSRF. For scale, application servers remain stateless behind a load balancer, while Redis provides centralized, replicated session storage."
+
 ## Question 3. What is secret management in microservices?
 
 ## Question 4. How do you prevent SQL injection at scale?

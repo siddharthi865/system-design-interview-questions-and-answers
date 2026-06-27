@@ -503,6 +503,464 @@ Set alerts when:
 
 ## Question 2. How do you design a spell checker system?
 
+# How do you design a spell checker system?
+
+## Direct answer
+
+A spell checker system detects misspelled words and suggests the most likely corrections. At scale (e.g., in search engines, word processors, or messaging apps), the system combines:
+
+- A **dictionary** (lexicon of valid words)
+- **Efficient lookup structures** (Trie, Hash Set, BK-Tree)
+- **Approximate string matching** algorithms (Edit Distance/Levenshtein Distance)
+- **Ranking** using word frequency, context, and user behavior
+- **Machine Learning/Language Models** for context-aware corrections
+
+The primary challenge is balancing **accuracy**, **low latency**, and **memory efficiency**.
+
+---
+
+# Requirements / Problem Framing
+
+### Functional Requirements
+
+- Detect misspelled words
+- Suggest one or more corrections
+- Support multiple languages
+- Learn new words (custom dictionary)
+- Handle context-aware corrections (optional)
+
+### Non-functional Requirements
+
+- Response latency < 50 ms
+- High accuracy
+- High availability
+- Scalable to millions of requests/day
+- Efficient memory usage
+
+---
+
+# High-Level Architecture
+
+```text
+                 User Types Text
+                        │
+                        ▼
+                Text Processing Service
+                        │
+          ┌─────────────┴─────────────┐
+          ▼                           ▼
+     Tokenization               Normalization
+          │                           │
+          └─────────────┬─────────────┘
+                        ▼
+                Dictionary Lookup
+                        │
+          ┌─────────────┴─────────────┐
+          ▼                           ▼
+      Word Exists?               Misspelled
+          │                           │
+         Yes                          ▼
+          │                 Candidate Generator
+          │                           │
+          ▼                           ▼
+      Return Word             Candidate Ranking
+                                        │
+                                        ▼
+                              Best Suggestions
+```
+
+---
+
+# Core Components
+
+### 1. Dictionary
+
+Stores valid words.
+
+Example:
+
+```text
+apple
+application
+banana
+computer
+database
+system
+```
+
+Implementation options:
+
+| Structure    | Lookup   | Memory                   | Notes                 |
+| ------------ | -------- | ------------------------ | --------------------- |
+| Hash Set     | O(1)     | Higher                   | Fast exact lookup     |
+| Trie         | O(L)     | Efficient prefix sharing | Supports autocomplete |
+| Sorted Array | O(log N) | Low                      | Limited functionality |
+
+For spell checking, a **Trie** or **Hash Set** is commonly used.
+
+---
+
+### 2. Tokenizer
+
+Splits text into words.
+
+Example:
+
+```text
+Input:
+
+"I love applle pie."
+
+↓
+
+["I", "love", "applle", "pie"]
+```
+
+---
+
+### 3. Normalization
+
+Convert text into a standard form.
+
+Examples:
+
+```text
+Apple
+APPLE
+apple
+
+↓
+
+apple
+```
+
+Also handles:
+
+- Unicode normalization
+- Removing punctuation
+- Accent normalization (optional)
+
+---
+
+# Detecting Misspellings
+
+Lookup:
+
+```text
+Dictionary.contains(word)
+```
+
+Example:
+
+```text
+apple
+
+Exists?
+
+Yes
+```
+
+Example:
+
+```text
+applle
+
+Exists?
+
+No
+```
+
+Generate suggestions.
+
+---
+
+# Candidate Generation
+
+Several approaches are used.
+
+## 1. Edit Distance (Levenshtein Distance)
+
+Measures the minimum edits needed.
+
+Allowed operations:
+
+- Insert
+- Delete
+- Replace
+
+Example:
+
+```text
+applle
+
+↓
+
+apple
+
+Delete 'l'
+
+Distance = 1
+```
+
+Another:
+
+```text
+boook
+
+↓
+
+book
+
+Distance = 1
+```
+
+Time complexity:
+
+```text
+O(m × n)
+```
+
+where _m_ and _n_ are word lengths.
+
+---
+
+## 2. BK-Tree (Burkhard-Keller Tree)
+
+Designed for approximate string matching.
+
+Example:
+
+```text
+apple
+apply
+ape
+apricot
+banana
+```
+
+Instead of comparing against every word, the BK-Tree prunes large parts of the search space using edit distance, making candidate retrieval much faster for large dictionaries.
+
+Advantages:
+
+- Efficient fuzzy search
+- Scales to large vocabularies
+
+---
+
+## 3. Trie-Based Search
+
+Useful when the typo is near the beginning of the word.
+
+Example:
+
+```text
+appl
+
+↓
+
+apple
+application
+apply
+```
+
+Excellent for prefix-based suggestions and autocomplete.
+
+---
+
+# Ranking Suggestions
+
+Many candidates may have similar edit distances.
+
+Example:
+
+```text
+appl
+
+↓
+
+apple
+apply
+ample
+```
+
+Ranking signals:
+
+| Signal             | Example                             |
+| ------------------ | ----------------------------------- |
+| Edit distance      | Smaller is better                   |
+| Word frequency     | "apple" is more common than "ample" |
+| User history       | Frequently typed words rank higher  |
+| Domain dictionary  | Medical/legal vocabulary            |
+| Keyboard proximity | Nearby keys are common typo sources |
+
+Example:
+
+```text
+Input:
+
+applr
+
+Suggestions:
+
+apple
+apply
+applier
+```
+
+"apple" ranks highest because it is both close in edit distance and more frequently used.
+
+---
+
+# Context-Aware Spell Checking
+
+Simple spell checkers process one word at a time.
+
+Example:
+
+```text
+I ate bred.
+```
+
+Possible corrections:
+
+```text
+bred
+bread
+breed
+```
+
+Without context, either could be valid.
+
+With a language model:
+
+```text
+I ate bread.
+```
+
+is much more probable than:
+
+```text
+I ate breed.
+```
+
+Modern systems use n-gram models or transformer-based language models to improve suggestion quality.
+
+---
+
+# Data Storage
+
+```text
+Dictionary
+
+word
+frequency
+language
+lastUpdated
+```
+
+Optional:
+
+```text
+CustomDictionary
+
+userId
+word
+```
+
+Allows user-specific additions.
+
+---
+
+# Scaling Strategy
+
+### Sharding
+
+Partition by:
+
+- Language
+- First character
+- Hash of the word
+
+Example:
+
+```text
+English Dictionary
+
+Shard A-M
+
+Shard N-Z
+```
+
+---
+
+### Caching
+
+Frequently checked words:
+
+```text
+the
+computer
+system
+database
+```
+
+Store in an in-memory cache to avoid repeated lookups.
+
+---
+
+### Horizontal Scaling
+
+```text
+Load Balancer
+        │
+ ┌──────┴──────┐
+ ▼             ▼
+Spell Server  Spell Server
+        │
+        ▼
+ Shared Dictionary Store
+```
+
+Since dictionary lookups are mostly read-only, servers scale easily by adding more instances.
+
+---
+
+# Trade-offs
+
+| Approach                 | Advantages                     | Disadvantages                    |
+| ------------------------ | ------------------------------ | -------------------------------- |
+| Hash Set                 | Fast exact lookup              | No fuzzy search                  |
+| Trie                     | Prefix search, autocomplete    | Higher implementation complexity |
+| BK-Tree                  | Efficient approximate matching | More memory usage                |
+| Levenshtein on all words | Accurate                       | Too slow for large dictionaries  |
+| ML-based ranking         | Best accuracy                  | Higher latency and compute cost  |
+
+---
+
+# Security / Observability
+
+Monitor:
+
+- Request latency
+- Suggestion accuracy
+- Cache hit ratio
+- Dictionary update failures
+- Requests per second
+- Top misspelled words
+- Error rates
+
+Protect against abuse with:
+
+- Rate limiting
+- Input length validation
+- Logging and tracing for slow requests
+
+---
+
+# Interview-ready summary
+
+"A scalable spell checker first normalizes and tokenizes input, then performs a fast dictionary lookup using a Trie or Hash Set. If a word is missing, it generates candidate corrections using approximate matching techniques like Levenshtein Distance or a BK-Tree. The candidates are ranked based on edit distance, word frequency, keyboard proximity, and optionally contextual language models. The service is largely read-heavy, making it easy to scale horizontally with caching, dictionary sharding, and replicated read-only dictionaries, while keeping response latency under a few tens of milliseconds."
+
 ## Question 3. How do you design a plagiarism checker?
 
 ## Question 4. How do you design a news feed ranking system?

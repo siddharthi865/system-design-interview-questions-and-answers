@@ -386,6 +386,285 @@ Benefits:
 
 ## Question 2. What is token revocation in authentication?
 
+# What is token revocation in authentication?
+
+## Direct answer
+
+**Token revocation** is the process of **invalidating an authentication token before its natural expiration time**. It ensures that a token can no longer be used, even if it is otherwise valid.
+
+This is important when:
+
+- A user logs out
+- A device is lost or stolen
+- Credentials are compromised
+- An administrator disables an account
+- Permissions or roles change
+
+---
+
+# Why is Token Revocation Needed?
+
+Consider a user with a JSON Web Token (JWT) that expires in 24 hours.
+
+```text
+9:00 AM  Login
+        ↓
+JWT issued (valid for 24 hours)
+
+11:00 AM User logs out
+
+Without revocation:
+Token remains usable until next day
+```
+
+Even after logout, anyone holding the token can continue accessing protected resources until it expires.
+
+Token revocation solves this by invalidating the token immediately.
+
+---
+
+# Common Revocation Strategies
+
+## 1. Blacklisting Tokens
+
+Maintain a list of revoked tokens.
+
+```text
+Request
+    |
+JWT
+    |
+Authentication Service
+    |
+Check blacklist
+    |
+Revoked?
+  /      \
+Yes      No
+ |         |
+Reject   Accept
+```
+
+### Database
+
+```text
+Revoked Tokens
+---------------
+token_id (jti)
+expires_at
+reason
+revoked_at
+```
+
+### Pros
+
+- Immediate revocation
+- Simple to understand
+
+### Cons
+
+- Every request requires a blacklist lookup
+- Additional storage and maintenance
+
+---
+
+## 2. Short-Lived Access Tokens (Most Common)
+
+Issue:
+
+- Access token: 10–15 minutes
+- Refresh token: several days or weeks
+
+```text
+Access Token
+15 min
+      ↓
+Expires quickly
+
+Refresh Token
+30 days
+```
+
+If a user logs out:
+
+- Revoke the refresh token.
+- Existing access token expires soon.
+
+### Pros
+
+- No blacklist lookup for every request
+- Highly scalable
+- Common in modern systems
+
+### Cons
+
+- Revocation is not immediate; access tokens remain valid until they expire.
+
+---
+
+## 3. Refresh Token Revocation
+
+Only refresh tokens are stored server-side.
+
+```text
+Login
+   |
+Issue:
+Access Token
+Refresh Token
+        |
+Store Refresh Token
+```
+
+Logout:
+
+```text
+Delete Refresh Token
+```
+
+The current access token continues until expiration, but no new access tokens can be issued.
+
+This is the most common approach for JWT-based authentication.
+
+---
+
+## 4. Token Versioning
+
+Store a version number for each user.
+
+```text
+User
+------
+user_id
+token_version = 5
+```
+
+JWT payload:
+
+```json
+{
+  "userId": 123,
+  "version": 5
+}
+```
+
+On each request:
+
+```text
+JWT version == DB version ?
+        |
+      Yes → Allow
+       No → Reject
+```
+
+To revoke all active tokens for a user:
+
+```text
+token_version++
+```
+
+All previously issued tokens become invalid.
+
+### Pros
+
+- Revokes all sessions instantly
+- Simple implementation
+
+### Cons
+
+- Requires a database lookup (or cache lookup) on authenticated requests
+
+---
+
+## 5. Session Store (Opaque Tokens)
+
+Instead of self-contained JWTs, issue a random session ID.
+
+```text
+Client
+   |
+Session ID
+   |
+Server
+   |
+Redis / Database
+```
+
+Logout:
+
+```text
+Delete Session
+```
+
+The token immediately becomes invalid because the server no longer recognizes it.
+
+### Pros
+
+- Immediate revocation
+- Easy session management
+
+### Cons
+
+- Requires server-side state
+- Less scalable than fully stateless JWTs
+
+---
+
+# Comparison
+
+| Strategy                 | Immediate Revocation | Stateless          | Scalable  |
+| ------------------------ | -------------------- | ------------------ | --------- |
+| Blacklist                | ✅ Yes               | ❌ No              | Medium    |
+| Short-lived JWT          | ❌ No                | ✅ Yes             | Excellent |
+| Refresh token revocation | Partial              | Mostly             | Excellent |
+| Token versioning         | ✅ Yes               | ❌ Requires lookup | Good      |
+| Session store            | ✅ Yes               | ❌ No              | Good      |
+
+---
+
+# When to Revoke Tokens
+
+Typical events include:
+
+- User logs out
+- Password is changed
+- Password reset occurs
+- Account is disabled
+- User is deleted
+- Suspicious login detected
+- Device is reported lost
+- User permissions or roles change
+
+---
+
+# Scalability Considerations
+
+Large-scale systems typically:
+
+- Use **short-lived access tokens** (5–15 minutes)
+- Store **refresh tokens** in a database or cache like Redis
+- Revoke refresh tokens on logout or compromise
+- Use distributed caches for fast revocation checks when immediate invalidation is required
+
+This minimizes database lookups while allowing efficient session management.
+
+---
+
+# Trade-offs
+
+| Approach                            | Advantages                                     | Disadvantages                                                 |
+| ----------------------------------- | ---------------------------------------------- | ------------------------------------------------------------- |
+| Stateless JWTs                      | High performance, no server-side session state | Difficult to revoke immediately                               |
+| Server-side sessions                | Easy revocation and fine-grained control       | Requires shared session storage                               |
+| Blacklisting                        | Immediate invalidation of specific tokens      | Lookup overhead on each request                               |
+| Short-lived access + refresh tokens | Excellent balance of security and scalability  | Small window where an access token remains valid after logout |
+
+---
+
+# Interview-ready Summary
+
+> Token revocation is the ability to invalidate an authentication token before it expires. While self-contained JWTs are difficult to revoke immediately, common production systems address this by issuing **short-lived access tokens** and **server-managed refresh tokens**. Depending on security requirements, systems may also use **blacklists**, **token versioning**, or **server-side session stores** to support immediate revocation after logout, credential compromise, or account changes.
+
 ## Question 3. What is a man-in-the-middle (MITM) attack?
 
 ## Question 4. What is CSRF and how do you prevent it?

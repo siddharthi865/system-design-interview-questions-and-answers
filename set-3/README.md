@@ -278,6 +278,214 @@ They help:
 
 ## Question 2. What is sequence diagram in UML?
 
+## Direct Answer
+
+A **Sequence Diagram** is a UML behavioral diagram that shows **how different objects or components interact with each other over time** to complete a specific operation or use case.
+
+While a **Class Diagram** shows the **static structure** of a system, a **Sequence Diagram** shows the **dynamic behavior**—the order in which messages are exchanged between objects.
+
+---
+
+## What Does a Sequence Diagram Show?
+
+A sequence diagram answers questions like:
+
+- Which components participate in a workflow?
+- In what order are method calls made?
+- How does a request flow through the system?
+- What happens during a particular use case?
+
+Examples:
+
+- User login
+- Place an order
+- Process payment
+- Send notification
+
+---
+
+## Basic Components
+
+### 1. Actor
+
+The external user or system initiating the action.
+
+```text
+User
+```
+
+### 2. Lifeline
+
+Represents an object participating in the interaction.
+
+```text
+User        OrderService       Database
+ |                |                |
+ |                |                |
+```
+
+### 3. Message
+
+Communication between objects.
+
+```text
+User -> OrderService : placeOrder()
+```
+
+### 4. Activation Bar
+
+Represents the period during which an object is executing an operation.
+
+```text
+    |
+   [ ]
+   [ ]
+    |
+```
+
+---
+
+## Example: User Login Flow
+
+```text
+User          AuthService         Database
+ |                 |                 |
+ | login()         |                 |
+ |---------------> |                 |
+ |                 | validateUser()  |
+ |                 |---------------> |
+ |                 |                 |
+ |                 | user data       |
+ |                 |<--------------- |
+ |                 |                 |
+ | token           |                 |
+ |<--------------- |                 |
+```
+
+### Flow
+
+1. User sends login request.
+2. AuthService checks credentials in Database.
+3. Database returns user information.
+4. AuthService generates token.
+5. Token is returned to User.
+
+---
+
+## Example: Place Order in E-Commerce
+
+```text
+Customer     OrderService    PaymentService    InventoryService
+    |               |                |                |
+    | Place Order   |                |                |
+    |-------------> |                |                |
+    |               | Pay()          |                |
+    |               |--------------> |                |
+    |               |                | Success        |
+    |               | <------------- |                |
+    |               | Reserve Item() |                |
+    |               |-------------------------------> |
+    |               |                                |
+    |               | <----------------------------- |
+    | Order Created |                                |
+    | <------------ |                                |
+```
+
+This diagram clearly shows the order of interactions.
+
+---
+
+## Common Notations
+
+### Synchronous Call
+
+Caller waits for response.
+
+```text
+ServiceA -> ServiceB : process()
+```
+
+---
+
+### Return Message
+
+```text
+ServiceB --> ServiceA : success
+```
+
+Often omitted in interviews for simplicity.
+
+---
+
+### Asynchronous Call
+
+Caller does not wait.
+
+```text
+ServiceA -->> Queue : publishEvent()
+```
+
+Example:
+
+- Kafka
+- RabbitMQ
+- SQS
+
+---
+
+### Conditional Flow (alt)
+
+```text
+alt Payment Success
+    Create Order
+else Payment Failed
+    Return Error
+end
+```
+
+---
+
+### Loop
+
+```text
+loop For Each Item
+    Validate Item
+end
+```
+
+---
+
+## Class Diagram vs Sequence Diagram
+
+| Class Diagram        | Sequence Diagram          |
+| -------------------- | ------------------------- |
+| Static view          | Dynamic view              |
+| Shows classes        | Shows interactions        |
+| Shows relationships  | Shows message flow        |
+| Focus on structure   | Focus on behavior         |
+| Used in LLD modeling | Used in workflow modeling |
+
+---
+
+## When Used in System Design Interviews
+
+Sequence diagrams are useful for explaining:
+
+- Login flow
+- Payment processing
+- Order placement
+- Notification delivery
+- Distributed service interactions
+- Microservice communication
+
+Interviewers often ask for a sequence diagram after the high-level architecture because it demonstrates that you understand the runtime behavior of the system.
+
+---
+
+## Interview-Ready Summary
+
+> A UML Sequence Diagram is a behavioral diagram that shows how objects or services interact over time to complete a specific use case. It represents actors, participating components, messages exchanged between them, and the order of execution. Unlike a Class Diagram, which shows the static structure of a system, a Sequence Diagram focuses on runtime behavior and request flow.
+
 ## Question 3. What is an ER diagram?
 
 ## Question 4. Explain SOLID principles in system design

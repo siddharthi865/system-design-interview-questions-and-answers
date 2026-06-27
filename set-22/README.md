@@ -560,6 +560,347 @@ Implement structured logging and distributed tracing around cache reads, writes,
 
 ## Question 2. How do you ensure idempotency in payment processing APIs?
 
+# Direct answer
+
+**Idempotency** in payment processing means that **multiple identical requests produce the same result as a single request**, preventing duplicate charges caused by retries, network failures, or client timeouts.
+
+The standard approach is to require clients to send a unique **Idempotency-Key** with every payment request. The server stores the key and the result of the first successful execution. Any subsequent request with the same key returns the previously stored response instead of processing the payment again.
+
+---
+
+# Requirements / Problem Framing
+
+### Functional Requirements
+
+- Prevent duplicate payment processing.
+- Support safe retries after network failures or timeouts.
+- Return the same response for duplicate requests.
+- Handle concurrent duplicate requests correctly.
+
+### Non-functional Requirements
+
+- High reliability and consistency.
+- Low latency for retries.
+- Scalable across multiple application instances.
+- Fault tolerant.
+
+---
+
+# High-Level Architecture
+
+```text
+                POST /payments
+      +------------------------------+
+      | Idempotency-Key: abc123      |
+      +--------------+---------------+
+                     |
+                     v
+              API Gateway / LB
+                     |
+                     v
+             Payment Service
+                     |
+         Check Idempotency Store
+             /                \
+      Key Exists?          Key Missing?
+        |                      |
+ Return Stored           Create "Processing"
+ Response                Record (Atomic)
+                               |
+                               v
+                     Call Payment Gateway
+                               |
+                        Payment Successful
+                               |
+                               v
+                  Store Response + Status
+                               |
+                               v
+                       Return Response
+```
+
+---
+
+# Request Flow
+
+### First Request
+
+```text
+POST /payments
+
+Idempotency-Key: payment-123
+Amount: $100
+```
+
+Steps:
+
+1. Check if `payment-123` exists.
+2. It doesn't.
+3. Create an idempotency record atomically.
+4. Process payment.
+5. Save the response.
+6. Return success.
+
+---
+
+### Retry Request
+
+The client retries because it didn't receive the response.
+
+```text
+POST /payments
+
+Idempotency-Key: payment-123
+```
+
+Server:
+
+1. Finds existing record.
+2. Does **not** charge again.
+3. Returns the stored response.
+
+---
+
+# Idempotency Store
+
+A dedicated table (or Redis with persistence) stores request metadata.
+
+| Idempotency Key | Request Hash | Status  | Response   | Created At |
+| --------------- | ------------ | ------- | ---------- | ---------- |
+| payment-123     | hash(req)    | SUCCESS | Payment ID | Timestamp  |
+
+### Why store the request hash?
+
+If someone reuses the same key with different request data:
+
+```text
+Key: payment-123
+
+Amount = $100
+```
+
+Later:
+
+```text
+Key: payment-123
+
+Amount = $500
+```
+
+The server compares the request hash and returns an error because the key is being reused for a different operation.
+
+---
+
+# Handling Concurrent Requests
+
+Two identical requests may arrive simultaneously.
+
+Without protection:
+
+```text
+Request A → Charge Card
+
+Request B → Charge Card
+```
+
+Result:
+
+- Customer charged twice.
+
+### Solution
+
+Use an atomic insert or unique constraint.
+
+```sql
+INSERT INTO idempotency_keys(key)
+VALUES('payment-123');
+```
+
+Only one insert succeeds.
+
+The other request:
+
+- Waits for completion, or
+- Returns the stored result once available.
+
+This guarantees only one payment execution.
+
+---
+
+# State Machine
+
+```text
+NEW
+
+↓
+
+PROCESSING
+
+↓
+
+SUCCESS
+```
+
+or
+
+```text
+NEW
+
+↓
+
+PROCESSING
+
+↓
+
+FAILED
+```
+
+If another request arrives while the status is `PROCESSING`, it can:
+
+- Wait briefly and poll.
+- Return `202 Accepted`.
+- Return a "Request in progress" response.
+
+This prevents duplicate execution during in-flight processing.
+
+---
+
+# Deep Design Considerations
+
+## Atomicity
+
+Creating the idempotency record and marking it as `PROCESSING` should be atomic to prevent race conditions.
+
+Possible implementations:
+
+- Database transaction.
+- `INSERT ... ON CONFLICT DO NOTHING`.
+- Redis `SETNX`.
+
+---
+
+## Storage Duration
+
+Idempotency records shouldn't live forever.
+
+Typical retention:
+
+- 24 hours
+- 48 hours
+- 7 days (depending on business requirements)
+
+Expired records are cleaned up periodically.
+
+---
+
+## Exactly-Once vs At-Least-Once
+
+True **exactly-once delivery** is nearly impossible in distributed systems.
+
+The practical goal is:
+
+- Requests may be delivered **at least once**.
+- The API processes the payment **exactly once** using idempotency.
+
+---
+
+## External Payment Gateway
+
+Many payment gateways also support idempotency keys.
+
+Flow:
+
+```text
+Client
+    |
+Payment Service
+    |
+Stripe/Adyen/etc.
+    |
+Idempotency-Key forwarded
+```
+
+Even if your service retries the gateway call, the gateway prevents duplicate charges.
+
+---
+
+## Failure Scenarios
+
+### Response Lost
+
+```text
+Charge succeeds
+
+↓
+
+Network timeout
+
+↓
+
+Client retries
+```
+
+The stored response is returned without charging again.
+
+---
+
+### Server Crash
+
+```text
+Status = PROCESSING
+
+↓
+
+Server crashes
+```
+
+Recovery options:
+
+- Background worker reconciles with the payment gateway.
+- Check whether the payment was actually completed.
+- Update the record to `SUCCESS` or `FAILED` before allowing retries.
+
+---
+
+# Trade-offs
+
+| Approach                    | Pros                                | Cons                                                                                    |
+| --------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------- |
+| Idempotency Key             | Industry standard, simple, scalable | Requires client cooperation                                                             |
+| Database Unique Constraint  | Prevents duplicate inserts          | Doesn't handle response replay by itself                                                |
+| Distributed Lock            | Prevents concurrent execution       | Higher latency, lock management complexity                                              |
+| Request Fingerprinting Only | No client-generated key needed      | Harder to distinguish intentional duplicate payments from legitimate repeated purchases |
+
+---
+
+# Security / Observability
+
+**Security**
+
+- Generate high-entropy idempotency keys (typically UUIDs).
+- Validate that the same key isn't reused with different payloads.
+- Scope keys to the authenticated customer or merchant to prevent cross-user collisions.
+- Encrypt sensitive payment data; never store raw card details in the idempotency store.
+
+**Observability**
+
+Track metrics such as:
+
+- Duplicate request rate.
+- Idempotency cache hit rate.
+- Concurrent duplicate requests.
+- Requests stuck in `PROCESSING`.
+- Payment success/failure rates.
+- Retry frequency and latency.
+
+Log the idempotency key, request ID, and payment ID together to simplify debugging and distributed tracing.
+
+---
+
+# Interview-ready summary
+
+> "For payment APIs, I ensure idempotency by requiring clients to send a unique **Idempotency-Key** with every payment request. The server atomically creates an idempotency record before processing the payment, stores the final response, and returns that same response for any retries with the same key. I protect against concurrent duplicate requests using a unique constraint or `SETNX`, verify that the same key isn't reused with a different payload by storing a request hash, and periodically expire old idempotency records. This approach prevents duplicate charges while allowing clients to safely retry requests."
+
 ## Question 3. What is the difference between at-most-once, at-least-once, and exactly-once delivery?
 
 ## Question 4. How do you design a real-time typing indicator system for a chat app?

@@ -287,6 +287,270 @@ A retry queue with exponential backoff is a fault-tolerant messaging pattern whe
 
 ## Question 2. How do you design a self-healing system?
 
+## Direct answer
+
+A **self-healing system** is a distributed system that can **detect failures, isolate them, and automatically recover** without human intervention. It achieves this through **health monitoring, automated remediation, redundancy, and safe fallback mechanisms**.
+
+At a high level, it continuously answers three questions:
+
+- _Is something broken?_ (detection)
+- _How bad is it?_ (diagnosis)
+- _What should we do about it automatically?_ (remediation)
+
+---
+
+## Requirements / Problem Framing
+
+### Functional requirements
+
+- Detect service/component failures automatically
+- Restart or replace unhealthy instances
+- Route traffic away from failed nodes
+- Recover from transient and persistent failures
+- Maintain service continuity during failures
+
+### Non-functional requirements
+
+- High availability (minimal downtime)
+- Fast detection + recovery (low MTTR)
+- Safe automated remediation (no cascading failures)
+- Scalability across many services/nodes
+- Fault isolation
+
+---
+
+## High-Level Architecture
+
+```
+                 +----------------------+
+                 |  Monitoring System   |
+                 | (metrics/logs/traces|
+                 +----------+----------+
+                            |
+                            v
+                 +----------------------+
+                 |  Health Evaluator    |
+                 | (rules + anomaly     |
+                 |  detection)          |
+                 +----------+----------+
+                            |
+                unhealthy    | healthy
+                            v
+                 +----------------------+
+                 | Self-Healing Engine  |
+                 | (automation brain)   |
+                 +----------+----------+
+                            |
+        +-------------------+-------------------+
+        |                   |                   |
+        v                   v                   v
+ Restart instance     Replace node       Traffic re-routing
+ (process manager)   (orchestrator)     (load balancer)
+
+                            |
+                            v
+                 +----------------------+
+                 | Service Registry /   |
+                 | Load Balancer        |
+                 +----------------------+
+```
+
+---
+
+## Core Building Blocks
+
+### 1. Health Monitoring Layer
+
+Collects signals:
+
+- CPU, memory, disk
+- Request latency, error rates
+- Heartbeats / liveness probes
+- Dependency health (DB, cache, queues)
+
+Types of checks:
+
+| Type        | Meaning                |
+| ----------- | ---------------------- |
+| Liveness    | Is process alive?      |
+| Readiness   | Can it serve traffic?  |
+| Deep health | Is full stack working? |
+
+---
+
+### 2. Failure Detection System
+
+You need **fast + accurate detection**:
+
+Techniques:
+
+- Heartbeat timeout detection
+- Threshold-based alerting (e.g., error rate > 5%)
+- Sliding window anomaly detection
+- Circuit breaker triggers
+
+Trade-off:
+
+- Fast detection → false positives risk
+- Slow detection → longer downtime
+
+---
+
+### 3. Self-Healing Engine (Core Brain)
+
+This is the automation layer that executes recovery actions.
+
+#### Common actions:
+
+- Restart service/container
+- Recreate VM/pod
+- Scale out replicas
+- Kill stuck processes
+- Rollback deployment
+- Switch traffic to healthy region
+
+Example policy:
+
+```
+IF instance unhealthy for > 3 failures
+THEN restart instance
+IF restart fails 2 times
+THEN replace node
+```
+
+---
+
+### 4. Orchestration Layer
+
+Usually handled by:
+
+- Kubernetes-style control plane
+- VM orchestrators
+- Custom cluster managers
+
+Responsibilities:
+
+- Maintain desired state
+- Reconcile actual vs desired state
+- Recreate failed components
+
+This is the key to “self-healing by design”.
+
+---
+
+### 5. Load Balancing + Traffic Shifting
+
+Self-healing requires **automatic isolation**:
+
+- Remove unhealthy nodes from LB
+- Use health checks in routing decisions
+- Gradual traffic shifting (canary fallback)
+- Circuit breaker integration
+
+---
+
+## Deep Design Considerations
+
+### 1. Avoiding Cascading Failures
+
+A major risk: healing actions themselves overload system.
+
+Mitigation:
+
+- Rate-limit healing actions
+- Backoff between restarts
+- Bulkhead isolation (limit impact per service)
+- Circuit breakers
+
+---
+
+### 2. State vs Stateless Systems
+
+| Type              | Healing Strategy               |
+| ----------------- | ------------------------------ |
+| Stateless service | restart/recreate freely        |
+| Stateful service  | careful recovery + replication |
+
+Stateful systems require:
+
+- Replication (primary/secondary)
+- Snapshot recovery
+- WAL/log replay
+
+---
+
+### 3. Idempotent Recovery Actions
+
+All healing actions must be safe to retry:
+
+- Restart multiple times safely
+- No duplicate side effects
+- Safe rollback mechanisms
+
+---
+
+### 4. Multi-layer Healing Strategy
+
+Self-healing is not one layer; it’s hierarchical:
+
+| Layer     | Action               |
+| --------- | -------------------- |
+| App       | retry, fallback      |
+| Container | restart              |
+| Node      | reboot               |
+| Cluster   | reschedule workloads |
+| Region    | failover             |
+
+---
+
+### 5. Time-based escalation model
+
+```
+t + 0s   → retry request
+t + 10s  → restart container
+t + 30s  → replace instance
+t + 2m   → failover region
+```
+
+---
+
+### 6. Observability is critical
+
+Without observability, healing is blind.
+
+- Metrics: latency, error rate, saturation
+- Logs: structured error logs
+- Tracing: distributed request paths
+- Alerts: anomaly + threshold-based
+
+---
+
+## Trade-offs
+
+| Approach             | Pros              | Cons                         |
+| -------------------- | ----------------- | ---------------------------- |
+| Aggressive healing   | fast recovery     | false positives              |
+| Conservative healing | stable system     | slower recovery              |
+| Fully automated      | zero ops overhead | risk of bad automation loops |
+| Human-in-the-loop    | safe              | slow                         |
+
+---
+
+## Failure Scenarios to Handle
+
+- Zombie processes (alive but non-responsive)
+- Split brain (multiple primaries)
+- Dependency failure (DB down)
+- Network partitions
+- Cascading overload
+- Bad deploy rollout
+
+---
+
+## Interview-ready Summary
+
+A self-healing system is a distributed architecture that automatically detects failures through monitoring, diagnoses severity, and executes corrective actions like restart, replacement, or traffic rerouting. It relies heavily on orchestration systems, health checks, circuit breakers, and automated remediation policies. The key design challenge is balancing fast recovery with avoiding false positives and cascading failures, while ensuring idempotent and safe healing actions across stateless and stateful components.
+
 ## Question 3. How do you handle zombie processes in distributed systems?
 
 ## Question 4. What is replication lag and how do you mitigate it?

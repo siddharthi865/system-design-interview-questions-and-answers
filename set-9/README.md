@@ -364,6 +364,290 @@ For systems within a single trusted organization (such as most microservices at 
 
 ## Question 2. What is eventual vs strong consistency tradeoff?
 
+# Eventual Consistency vs Strong Consistency Trade-off
+
+## Direct answer
+
+The trade-off between **strong consistency** and **eventual consistency** is a balance between **data correctness (consistency)** and **availability, latency, and scalability**.
+
+- **Strong consistency** guarantees that every read returns the **latest committed write**, but may increase latency or reduce availability during failures.
+- **Eventual consistency** allows temporary inconsistencies, but provides lower latency, higher availability, and better scalability. Given no new updates, all replicas eventually converge to the same value.
+
+This trade-off is closely related to the **CAP theorem**, where network partitions often force a system to prioritize either consistency or availability.
+
+---
+
+## Strong Consistency
+
+With strong consistency, once a write is acknowledged, **all subsequent reads** return the latest value.
+
+### Example
+
+```
+Time T1:
+User A updates profile name:
+"John" → "Johnny"
+
+Time T2:
+Any user reading immediately sees:
+
+Johnny ✅
+```
+
+There is no possibility of reading stale data.
+
+### How it's achieved
+
+- Synchronous replication
+- Consensus algorithms (e.g., Raft or Paxos)
+- Quorum-based writes with appropriate read/write quorum sizes
+
+### Advantages
+
+- No stale reads
+- Easier application logic
+- Strong correctness guarantees
+
+### Disadvantages
+
+- Higher write latency
+- Lower availability during network partitions
+- Harder to scale globally
+
+---
+
+## Eventual Consistency
+
+With eventual consistency, a write is accepted immediately by one replica and propagated asynchronously to others.
+
+For a short period, different replicas may return different values.
+
+### Example
+
+```
+Replica A:
+Johnny
+
+Replica B:
+John
+
+Replica C:
+John
+```
+
+After replication completes:
+
+```
+Replica A:
+Johnny
+
+Replica B:
+Johnny
+
+Replica C:
+Johnny
+```
+
+All replicas converge eventually.
+
+### Advantages
+
+- Very low latency
+- High availability
+- Excellent horizontal scalability
+- Better performance across multiple geographic regions
+
+### Disadvantages
+
+- Temporary stale reads
+- Applications may need conflict resolution
+- More complex client logic in some cases
+
+---
+
+## Comparison
+
+| Feature                        | Strong Consistency       | Eventual Consistency |
+| ------------------------------ | ------------------------ | -------------------- |
+| Latest data guaranteed         | ✅                       | ❌                   |
+| Stale reads possible           | ❌                       | ✅                   |
+| Write latency                  | Higher                   | Lower                |
+| Read latency                   | Higher (in some designs) | Lower                |
+| Availability during partitions | Lower                    | Higher               |
+| Scalability                    | Moderate                 | Excellent            |
+| Typical replication            | Synchronous              | Asynchronous         |
+
+---
+
+## Real-world examples
+
+### Strong consistency
+
+Suitable when correctness is critical:
+
+- Banking transactions
+- Payment processing
+- Inventory management
+- Order processing
+- Distributed locks
+
+Example:
+
+```
+Balance = ₹500
+
+Withdraw ₹500
+
+Next read must return:
+
+₹0
+```
+
+Returning ₹500 after the withdrawal could lead to incorrect business decisions.
+
+---
+
+### Eventual consistency
+
+Suitable when brief delays are acceptable:
+
+- Social media feeds
+- Likes and reactions
+- Product reviews
+- DNS propagation
+- Analytics dashboards
+
+Example:
+
+```
+You like a post.
+
+Your friend sees:
+
+0 likes
+
+Two seconds later:
+
+1 like
+```
+
+This temporary inconsistency is generally acceptable.
+
+---
+
+## Timeline comparison
+
+### Strong consistency
+
+```
+Write
+  |
+Commit everywhere
+  |
+Read
+
+Always latest value
+```
+
+### Eventual consistency
+
+```
+Write
+  |
+Replica A updated
+  |
+Read from Replica B
+Old value
+  |
+Replication completes
+  |
+Future reads
+Latest value
+```
+
+---
+
+## Impact on system design
+
+### Strong consistency
+
+```
+Client
+   |
+Leader
+   |
+Sync Replication
+   |
+Followers
+   |
+ACK
+```
+
+The client waits until replication satisfies the consistency requirement before receiving success.
+
+### Eventual consistency
+
+```
+Client
+   |
+Primary Replica
+   |
+ACK immediately
+   |
+Async replication
+   |
+Other replicas updated later
+```
+
+The client receives a faster response, but some replicas may temporarily lag behind.
+
+---
+
+## Choosing between them
+
+| Use Strong Consistency When       | Use Eventual Consistency When         |
+| --------------------------------- | ------------------------------------- |
+| Money is involved                 | High read throughput is needed        |
+| Data correctness is essential     | Minor delays are acceptable           |
+| Double spending must be prevented | Global low-latency access is required |
+| Inventory must be exact           | Social interactions and feeds         |
+
+---
+
+## Common techniques
+
+### Strong consistency
+
+- Leader-based replication
+- Consensus protocols
+- Synchronous replication
+- Read/write quorums (e.g., ensuring **R + W > N**)
+
+### Eventual consistency
+
+- Asynchronous replication
+- Background synchronization
+- Version vectors
+- Conflict resolution (last-write-wins, CRDTs, or application-specific merge logic)
+
+---
+
+## Trade-offs
+
+| Strong Consistency           | Eventual Consistency           |
+| ---------------------------- | ------------------------------ |
+| Highest correctness          | Highest availability           |
+| Predictable reads            | Faster responses               |
+| Simpler application logic    | More complex conflict handling |
+| Higher latency               | Lower latency                  |
+| Less resilient to partitions | More resilient to partitions   |
+
+---
+
+## Interview-ready summary
+
+> "Strong consistency guarantees that every read sees the most recent successful write, making it ideal for systems like banking or inventory management where correctness is critical. Eventual consistency allows replicas to be temporarily out of sync but converge over time, enabling lower latency, higher availability, and better scalability. In distributed systems, the choice depends on business requirements: prioritize strong consistency when incorrect data is unacceptable, and eventual consistency when performance and availability matter more than immediate freshness."
+
 ## Question 3. What is active-active vs active-passive setup?
 
 ## Question 4. How do you design a failover mechanism?

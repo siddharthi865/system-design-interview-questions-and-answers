@@ -232,6 +232,121 @@ Temporary inconsistencies are acceptable if the service remains responsive.
 
 ## Question 2. What is sticky caching?
 
+# Sticky Caching
+
+## Direct answer
+
+**Sticky caching** is a caching strategy where requests from the same user, client, or session are consistently routed to the same server, allowing that server's **local cache** to be reused effectively. This improves cache hit rates and reduces latency because the cached data is already present on that server.
+
+Sticky caching is commonly implemented using **sticky sessions (session affinity)** at the load balancer.
+
+---
+
+## How it works
+
+Suppose you have three application servers, each with its own in-memory cache.
+
+```text
+                Load Balancer
+                     |
+      +--------------+--------------+
+      |              |              |
+   Server A       Server B       Server C
+   Local Cache    Local Cache    Local Cache
+```
+
+If User A always gets routed to **Server A**, then:
+
+1. First request:
+   - Cache miss
+   - Server A fetches data from the database.
+   - Stores it in its local cache.
+
+2. Subsequent requests:
+   - User A continues hitting Server A.
+   - Data is served directly from the local cache.
+
+```text
+User A
+   │
+   ▼
+Load Balancer
+   │
+   ▼
+Server A
+(Cache Hit)
+```
+
+Without sticky routing, User A's requests might go to different servers, each experiencing cache misses until their local caches are populated.
+
+---
+
+## Benefits
+
+- **Higher cache hit rate** for repeated requests from the same user.
+- **Lower latency** because data is served from local memory.
+- **Reduced database load** due to fewer repeated queries.
+- Enables use of fast in-memory caches without requiring every cache lookup to go to a distributed cache.
+
+---
+
+## Drawbacks
+
+- **Uneven load distribution:** Some servers may become hotspots if many active users are pinned to them.
+- **Poor fault tolerance:** If a server fails, its local cache is lost and users are redirected elsewhere, causing cache misses.
+- **Harder to scale:** Adding or removing servers can redistribute users, reducing cache effectiveness.
+- **Cache duplication:** The same data may be stored independently on multiple servers, increasing memory usage.
+
+---
+
+## Sticky caching vs. distributed caching
+
+| Aspect          | Sticky Caching                              | Distributed Cache             |
+| --------------- | ------------------------------------------- | ----------------------------- |
+| Cache location  | Local to each application server            | Shared cache cluster          |
+| Routing         | Requires session affinity                   | Any server can serve requests |
+| Cache hit rate  | High for repeat requests to the same server | High across all servers       |
+| Scalability     | Limited by sticky routing                   | Better horizontal scalability |
+| Fault tolerance | Lower                                       | Higher                        |
+| Examples        | Local in-memory caches                      | Redis, Memcached              |
+
+---
+
+## When to use sticky caching
+
+Sticky caching is a good fit when:
+
+- Users make many repeated requests during a session.
+- Cached data is relatively small and frequently reused.
+- Very low latency is important.
+- The application already uses sticky sessions.
+
+Examples include:
+
+- User profile pages
+- Shopping carts stored in memory
+- Dashboard data
+- Frequently accessed session-specific information
+
+---
+
+## When not to use it
+
+Avoid sticky caching when:
+
+- The system must scale across many application servers.
+- High availability is critical.
+- Requests should be evenly distributed.
+- Multiple servers need to share the same cached data.
+
+In these cases, a distributed cache such as Redis is typically a better choice.
+
+---
+
+## Interview-ready summary
+
+> Sticky caching keeps requests from the same user on the same application server so that the server's local cache can be reused. This improves cache hit rates, reduces latency, and lowers database load. However, it introduces uneven load distribution, reduces fault tolerance, and makes scaling more difficult. For large-scale distributed systems, a shared distributed cache is generally preferred over sticky caching.
+
 ## Question 3. What is a cold cache vs a warm cache?
 
 ## Question 4. What is a dead letter queue (DLQ)?

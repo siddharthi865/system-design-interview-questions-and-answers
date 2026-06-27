@@ -764,6 +764,480 @@ Distributed tracing helps follow requests across gateway, playback, recommendati
 
 ## Question 2. What's the architecture of a distributed build system (like Bazel)?
 
+# Architecture of a Distributed Build System (like Bazel)
+
+## Direct answer
+
+A distributed build system accelerates software builds by **analyzing the dependency graph (DAG), scheduling independent build actions across many remote workers, caching build outputs, and reusing previously built artifacts**. Systems like Bazel achieve scalability through **deterministic builds**, **content-addressable storage (CAS)**, **remote execution**, and **incremental builds**.
+
+The key idea is:
+
+- Model the build as a **Directed Acyclic Graph (DAG)**.
+- Build only what has changed.
+- Execute independent tasks in parallel.
+- Cache outputs using content hashes.
+- Reuse artifacts across developers and CI pipelines.
+
+---
+
+# 1. Requirements / Problem Framing
+
+## Functional Requirements
+
+- Build projects in multiple languages
+- Resolve dependencies
+- Incremental builds
+- Parallel execution
+- Remote execution
+- Shared build cache
+- Test execution
+- Artifact generation
+- Build reproducibility
+
+## Non-Functional Requirements
+
+- Low build latency
+- Horizontal scalability
+- High cache hit ratio
+- Deterministic outputs
+- Fault tolerance
+- Efficient resource utilization
+- Secure execution of untrusted build actions
+
+---
+
+# 2. High-Level Architecture
+
+```text
+                    Developer / CI
+                           |
+                    Build Client (CLI)
+                           |
+                  Build Coordinator
+                           |
+        +------------------+------------------+
+        |                  |                  |
+ Dependency Analyzer   Scheduler       Cache Service
+        |                  |                  |
+        |                  |         Content Addressable
+        |                  |           Storage (CAS)
+        |                  |
+        +------------------+
+                 |
+          Remote Execution API
+                 |
+      +----------+-----------+-----------+
+      |                      |           |
+   Worker 1               Worker 2    Worker N
+      |                      |           |
+  Sandbox Build         Sandbox Build  Sandbox Build
+      |
+ Artifact Upload to CAS
+```
+
+---
+
+# 3. Core Components
+
+## Build Client
+
+Responsible for:
+
+- Parsing build commands
+- Loading build configuration
+- Sending build requests
+- Downloading final artifacts
+
+Examples:
+
+```text
+bazel build //app:server
+```
+
+---
+
+## Dependency Analyzer
+
+Reads build definitions and constructs a **Directed Acyclic Graph (DAG)**.
+
+Example:
+
+```text
+Frontend
+   |
+ API
+ /   \
+Core Utils
+```
+
+The analyzer determines:
+
+- What targets need rebuilding
+- Build order
+- Parallelizable tasks
+
+---
+
+## Scheduler
+
+The scheduler:
+
+- Traverses the DAG
+- Identifies ready-to-run actions
+- Assigns work to available workers
+- Tracks completion
+- Retries failed tasks when appropriate
+
+Scheduling only begins once all dependencies of an action are complete.
+
+---
+
+## Remote Workers
+
+Workers execute isolated build actions.
+
+Responsibilities:
+
+- Download inputs
+- Compile/test/package
+- Upload outputs
+- Return execution status
+
+Workers are stateless and can be scaled horizontally.
+
+---
+
+## Content Addressable Storage (CAS)
+
+Instead of naming files by path:
+
+```text
+/bin/server
+```
+
+CAS stores objects by hash:
+
+```text
+SHA256(source + compiler + flags)
+```
+
+Benefits:
+
+- Automatic deduplication
+- Efficient sharing
+- Immutable artifacts
+- Fast cache lookup
+
+---
+
+# 4. Build Execution Flow
+
+```text
+Developer starts build
+          |
+Parse BUILD files
+          |
+Construct dependency DAG
+          |
+Check remote/local cache
+          |
+Cache hit?
+     |
+ +---+---+
+ |       |
+Yes      No
+ |        |
+Download  Schedule action
+artifact      |
+              |
+      Remote worker executes
+              |
+      Upload artifact to CAS
+              |
+Return final executable
+```
+
+---
+
+# 5. Incremental Builds
+
+Only rebuild affected targets.
+
+Example:
+
+```text
+A
+|
+B
+|
+C
+|
+D
+```
+
+If only **B** changes:
+
+- Rebuild B
+- Rebuild C
+- Rebuild D
+
+A is reused from cache.
+
+This dramatically reduces build time for large codebases.
+
+---
+
+# 6. Remote Execution
+
+Instead of compiling locally:
+
+```text
+Laptop
+
+↓
+
+Compile
+```
+
+Use:
+
+```text
+Laptop
+
+↓
+
+Coordinator
+
+↓
+
+Worker Cluster
+
+↓
+
+Artifacts
+```
+
+Advantages:
+
+- Powerful build machines
+- Better parallelism
+- Consistent environments
+- Faster CI builds
+
+---
+
+# 7. Caching Strategy
+
+## Local Cache
+
+Stored on the developer's machine.
+
+Useful for:
+
+- Repeated local builds
+- Offline development
+
+---
+
+## Remote Cache
+
+Shared across developers and CI.
+
+If Developer A builds:
+
+```text
+foo.cpp
+```
+
+Developer B can reuse the compiled object without recompiling, provided the action hash matches exactly.
+
+---
+
+## Action Cache
+
+Each build action is identified by a hash derived from:
+
+- Source files
+- Compiler version
+- Compiler flags
+- Environment variables (when declared)
+- Dependency artifacts
+
+If the hash matches a previous build:
+
+```text
+Return cached artifact
+```
+
+No compilation is needed.
+
+---
+
+# 8. Parallel Execution
+
+Independent targets execute simultaneously.
+
+Example:
+
+```text
+         App
+       /     \
+ Backend   Frontend
+   /   \        |
+Core Utils     UI
+```
+
+Possible execution:
+
+```text
+Core
+Utils
+UI
+```
+
+run in parallel.
+
+Once complete:
+
+```text
+Backend
+```
+
+can execute.
+
+Finally:
+
+```text
+App
+```
+
+This exploits all available CPUs or workers.
+
+---
+
+# 9. Fault Tolerance
+
+Worker failure:
+
+```text
+Worker crashes
+
+↓
+
+Coordinator detects timeout
+
+↓
+
+Reschedule action
+```
+
+Since actions are deterministic and idempotent, they can safely be retried.
+
+Worker state is not relied upon.
+
+---
+
+# 10. Scalability Strategy
+
+## Stateless Coordinator
+
+The coordinator maintains scheduling state, but front-end API instances can remain stateless and scale behind a load balancer.
+
+---
+
+## Horizontal Worker Scaling
+
+Need more throughput?
+
+```text
+100 Workers
+
+↓
+
+500 Workers
+```
+
+No architectural changes required.
+
+---
+
+## Immutable Artifacts
+
+Artifacts never change.
+
+This enables:
+
+- Safe replication
+- Global caching
+- Easy deduplication
+
+---
+
+## Distributed CAS
+
+Large deployments shard CAS by hash.
+
+Example:
+
+```text
+Hash Prefix
+
+00–1F → Storage Node A
+
+20–3F → Storage Node B
+
+...
+```
+
+This supports petabytes of artifacts.
+
+---
+
+# 11. Security / Observability
+
+## Security
+
+- Sandbox or containerize each build action
+- Authenticate clients and workers
+- Encrypt communication (TLS)
+- Verify artifact integrity with hashes
+- Enforce access controls for repositories and caches
+- Restrict network and filesystem access during builds for hermeticity
+
+## Observability
+
+Monitor:
+
+- Build duration
+- Queue wait time
+- Worker utilization
+- Cache hit ratio
+- Cache download/upload latency
+- Failed actions
+- Worker health
+- Scheduler throughput
+
+Distributed tracing helps identify slow build stages across coordinator, cache, and workers.
+
+---
+
+# 12. Trade-offs
+
+| Decision                    | Pros                                       | Cons                                      |
+| --------------------------- | ------------------------------------------ | ----------------------------------------- |
+| Remote execution            | Faster builds, better resource utilization | Network overhead                          |
+| Shared remote cache         | Reuses work across developers and CI       | Requires deterministic builds             |
+| Content-addressable storage | Deduplication, immutability                | Hash computation and storage management   |
+| Incremental builds          | Very fast rebuilds                         | Accurate dependency tracking is essential |
+| Distributed workers         | Massive parallelism                        | Scheduler and infrastructure complexity   |
+| Hermetic builds             | Reproducible, cache-friendly               | Requires strict dependency declaration    |
+
+---
+
+# Interview-ready summary
+
+> "I would design a distributed build system around a dependency DAG, where the client analyzes build targets and the scheduler dispatches independent actions to a pool of remote workers. Each action executes in a hermetic sandbox, with inputs and outputs stored in a content-addressable store. A shared action cache keyed by the hash of sources, tools, flags, and declared environment enables incremental and cross-user builds. Independent tasks execute in parallel, failed actions are retried on other workers, and stateless workers with distributed CAS allow the system to scale efficiently while producing deterministic, reproducible builds."
+
 ## Question 3. How do you optimize for tail latency in large-scale distributed systems?
 
 ## Question 4. How would you design a decentralized social network (like Mastodon)?

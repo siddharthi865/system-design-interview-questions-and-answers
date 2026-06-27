@@ -218,6 +218,251 @@ Typical concerns include:
 
 ## Question 2. Explain the difference between High-Level Design (HLD) and Low-Level Design (LLD)
 
+# Direct answer
+
+**High-Level Design (HLD)** describes the overall architecture of a system—major components, services, databases, and how they interact.
+
+**Low-Level Design (LLD)** describes the internal implementation details of those components—classes, methods, data structures, design patterns, and object relationships.
+
+A simple way to remember it:
+
+- **HLD = What are we building and how do major pieces interact?**
+- **LLD = How exactly is each piece implemented?**
+
+---
+
+# HLD vs LLD
+
+| Aspect               | High-Level Design (HLD)                     | Low-Level Design (LLD)              |
+| -------------------- | ------------------------------------------- | ----------------------------------- |
+| Focus                | System architecture                         | Component implementation            |
+| Audience             | Architects, senior engineers, stakeholders  | Developers                          |
+| Abstraction Level    | High                                        | Detailed                            |
+| Scope                | Entire system                               | Individual modules/services         |
+| Diagrams             | Architecture diagrams, service interactions | Class diagrams, sequence diagrams   |
+| Technology Decisions | Often included                              | Usually fixed already               |
+| Main Question        | "How will the system be structured?"        | "How will this component be coded?" |
+
+---
+
+# Example: Designing a URL Shortener
+
+## High-Level Design (HLD)
+
+At HLD level, we discuss:
+
+```text
+Users
+   |
+Load Balancer
+   |
+Application Servers
+   |
+Redis Cache
+   |
+Database
+```
+
+Topics include:
+
+- API design
+- Database choice
+- Caching strategy
+- Scalability
+- Replication
+- Load balancing
+- Availability
+
+Questions answered:
+
+- Should we use SQL or NoSQL?
+- Do we need caching?
+- How do we generate unique short URLs?
+- How do we scale to millions of requests?
+
+---
+
+## Low-Level Design (LLD)
+
+Inside the URL Shortener service, we discuss:
+
+```java
+class UrlService {
+    ShortUrl createShortUrl(String longUrl);
+    String getOriginalUrl(String shortCode);
+}
+
+class UrlRepository {
+    save();
+    findByShortCode();
+}
+
+class ShortCodeGenerator {
+    generate();
+}
+```
+
+Topics include:
+
+- Classes
+- Interfaces
+- Object relationships
+- Design patterns
+- Method signatures
+- Error handling
+
+Questions answered:
+
+- What classes are needed?
+- What methods should each class expose?
+- Which design pattern should be used?
+- How should validation be implemented?
+
+---
+
+# Another Example: Food Delivery App
+
+## HLD View
+
+```text
+Customer App
+     |
+API Gateway
+     |
+-------------------------
+|      |       |        |
+User  Order Restaurant Payment
+Svc   Svc     Svc       Svc
+     |
+ Message Queue
+```
+
+Discussion focuses on:
+
+- Microservices
+- Service communication
+- Databases
+- Caching
+- Event-driven architecture
+- Scalability
+
+---
+
+## LLD View
+
+Inside Order Service:
+
+```text
+Order
+OrderItem
+OrderManager
+PaymentProcessor
+OrderRepository
+```
+
+Discussion focuses on:
+
+- Class design
+- Relationships
+- Interfaces
+- Business rules
+- State transitions
+
+For example:
+
+```text
+CREATED
+   ↓
+PAID
+   ↓
+PREPARING
+   ↓
+DELIVERED
+```
+
+---
+
+# When are they used?
+
+### HLD is used when:
+
+- Designing a new system
+- Discussing architecture
+- Planning scalability
+- Conducting system design interviews
+
+Examples:
+
+- Design Instagram
+- Design WhatsApp
+- Design YouTube
+
+---
+
+### LLD is used when:
+
+- Implementing features
+- Writing code
+- Creating reusable components
+- Conducting object-oriented design interviews
+
+Examples:
+
+- Design a Parking Lot
+- Design an Elevator System
+- Design a Vending Machine
+
+---
+
+# Relationship between HLD and LLD
+
+They are not separate activities.
+
+```text
+Requirements
+     ↓
+High-Level Design
+     ↓
+Low-Level Design
+     ↓
+Implementation
+     ↓
+Testing
+```
+
+HLD defines the architecture.
+
+LLD defines how each architectural component is implemented.
+
+---
+
+# Common interview perspective
+
+In a **System Design Interview**, interviewers usually expect mostly **HLD**:
+
+- APIs
+- Databases
+- Caching
+- Load balancing
+- Replication
+- Sharding
+- Scalability trade-offs
+
+In an **Object-Oriented Design (OOD/LLD) Interview**, interviewers expect:
+
+- Classes
+- Interfaces
+- Design patterns
+- SOLID principles
+- Relationships
+- Extensibility
+
+---
+
+# Interview-ready summary
+
+> High-Level Design (HLD) focuses on the overall architecture of a system, including services, databases, communication patterns, and scalability. Low-Level Design (LLD) focuses on the detailed implementation of individual components, including classes, interfaces, methods, and design patterns. HLD answers "how the system is structured," while LLD answers "how each part is implemented."
+
 ## Question 3. What are functional and non-functional requirements in system design?
 
 ## Question 4. What is scalability in system design?

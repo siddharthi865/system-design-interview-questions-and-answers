@@ -698,6 +698,559 @@ Use centralized logging, metrics, distributed tracing, and alerts.
 
 ## Question 2. How do you design a cricket/football score tracking app?
 
+# Design a Cricket/Football Score Tracking App
+
+## Direct Answer
+
+A score tracking app (like Cricbuzz, ESPN, SofaScore, or Flashscore) provides **live scores, commentary, match statistics, scorecards, notifications, and historical data** to millions of users with very low latency. The primary challenge is handling **high fan-out (one match → millions of viewers)** while ensuring live updates are delivered in near real time.
+
+The architecture is primarily **event-driven**, with **WebSockets**, **publish-subscribe messaging**, **caching**, and **CDNs** to efficiently distribute live match updates.
+
+---
+
+# 1. Requirements / Problem Framing
+
+## Functional Requirements
+
+### User Features
+
+- View live scores
+- Ball-by-ball (cricket) or minute-by-minute (football) updates
+- Match commentary
+- Live scorecard
+- Team/player statistics
+- Fixtures and schedules
+- Points table/league standings
+- Push notifications
+- Search teams, players, tournaments
+
+### Admin/Data Operator Features
+
+- Feed live match events
+- Correct scoring mistakes
+- Update player statistics
+- Manage tournaments
+
+---
+
+## Non-functional Requirements
+
+- Millions of concurrent users
+- Score updates within 1–2 seconds
+- High availability (99.99%)
+- Low latency (<100 ms for score updates)
+- Scalable during major tournaments (e.g., IPL, FIFA World Cup)
+- Fault tolerant
+- Eventually consistent for non-critical statistics
+
+---
+
+# 2. High-Level Architecture
+
+```text
+                Users (Mobile/Web)
+                       |
+                 CDN + Load Balancer
+                       |
+                  API Gateway
+                       |
+ ----------------------------------------------------
+ |            |            |           |             |
+ Match      Score      Notification   Stats      User
+ Service    Service       Service     Service    Service
+      \         |            |           /
+       \        |            |          /
+        ---------- Event Bus (Kafka) ----------
+                     |
+             Live Data Processor
+                     |
+          Score Feed / Data Providers
+                     |
+               Operator Dashboard
+
+Storage
+--------
+Redis
+Match DB
+Stats DB
+Time-Series DB
+Search Index
+```
+
+---
+
+# 3. Core Components
+
+## Match Service
+
+Stores
+
+- Match metadata
+- Teams
+- Venue
+- Toss
+- Schedule
+- Match status
+
+Example
+
+```text
+Match
+--------
+match_id
+team1
+team2
+venue
+start_time
+status
+```
+
+---
+
+## Live Score Service
+
+Responsible for
+
+- Current score
+- Overs/minutes
+- Wickets/goals
+- Match state
+
+Example
+
+```text
+MatchState
+
+Runs: 182/4
+
+Overs: 18.3
+
+Target: 201
+```
+
+For football
+
+```text
+Score
+
+Liverpool 2
+
+Arsenal 1
+
+Minute 84
+```
+
+---
+
+## Commentary Service
+
+Stores
+
+- Ball-by-ball commentary
+- Match events
+
+Example
+
+```text
+18.4
+
+Four!
+
+Excellent cover drive.
+```
+
+or
+
+```text
+82'
+
+Goal!
+
+Messi scores.
+```
+
+---
+
+## Statistics Service
+
+Maintains
+
+- Batting statistics
+- Bowling statistics
+- Player ratings
+- Possession
+- Passing accuracy
+- Heatmaps
+
+Can be computed asynchronously.
+
+---
+
+## Notification Service
+
+Examples
+
+- Match started
+- Wicket
+- Goal
+- Half time
+- Full time
+- Milestones
+
+Notifications are generated from match events.
+
+---
+
+# 4. Data Flow
+
+```text
+Official Feed
+
+↓
+
+Data Ingestion
+
+↓
+
+Kafka
+
+↓
+
+Score Processor
+
+↓
+
+Redis
+
+↓
+
+WebSocket Gateway
+
+↓
+
+Millions of Users
+```
+
+Every event is published once and consumed by multiple services.
+
+---
+
+# 5. Database Design
+
+## Match Table
+
+```text
+match_id
+team1
+team2
+venue
+status
+start_time
+```
+
+---
+
+## Event Table
+
+```text
+event_id
+match_id
+timestamp
+event_type
+payload
+```
+
+Example payload
+
+```json
+{
+  "over": 18.3,
+  "runs": 6,
+  "batsman": "Virat"
+}
+```
+
+or
+
+```json
+{
+  "minute": 84,
+  "goal_by": "Messi"
+}
+```
+
+---
+
+## Score Snapshot
+
+```text
+match_id
+
+current_score
+
+overs
+
+wickets
+
+last_updated
+```
+
+Redis stores this for fast access.
+
+---
+
+# 6. Real-Time Update Strategy
+
+Polling every second does not scale well.
+
+### Better Solution: WebSockets
+
+```text
+Client
+
+↓
+
+WebSocket
+
+↓
+
+Live Update Server
+
+↓
+
+Score Updates
+```
+
+When a wicket falls
+
+```text
+Score Updated
+
+↓
+
+Publish Event
+
+↓
+
+All Connected Clients Receive Update
+```
+
+Advantages
+
+- Low latency
+- Reduced network overhead
+- Efficient for millions of users
+
+---
+
+# 7. Event-Driven Architecture
+
+Each match event is published once.
+
+Example
+
+```text
+Goal Scored
+
+↓
+
+Kafka Topic
+
+↓
+
+Score Service
+
+↓
+
+Commentary Service
+
+↓
+
+Statistics Service
+
+↓
+
+Notification Service
+
+↓
+
+Analytics
+```
+
+Each service processes the event independently.
+
+---
+
+# 8. Scaling Strategy
+
+## Stateless API Servers
+
+```text
+Load Balancer
+
+↓
+
+API Server 1
+
+API Server 2
+
+API Server 3
+```
+
+Horizontal scaling is straightforward.
+
+---
+
+## WebSocket Servers
+
+```text
+Users
+
+↓
+
+Load Balancer
+
+↓
+
+WebSocket Cluster
+```
+
+Clients remain connected throughout the match.
+
+---
+
+## Redis Cache
+
+Store
+
+- Current score
+- Current over/minute
+- Live scoreboard
+- Match metadata
+
+This avoids frequent database reads.
+
+---
+
+## CDN
+
+Static assets
+
+- Images
+- Team logos
+- Player photos
+- JavaScript
+- CSS
+
+Served from a CDN.
+
+---
+
+## Database Scaling
+
+### Read Replicas
+
+Historical data
+
+```text
+Primary
+
+↓
+
+Read Replica 1
+
+↓
+
+Read Replica 2
+```
+
+Live scores come from Redis rather than the database.
+
+---
+
+# 9. Reliability
+
+- Kafka replication for durable event streams
+- Multiple WebSocket servers behind a load balancer
+- Redis replication and failover
+- Idempotent event processing to handle duplicate events
+- Retry and dead-letter queues for failed consumers
+- Health checks and auto-scaling during major sporting events
+
+---
+
+# 10. Capacity / Sizing (Example)
+
+Assumptions:
+
+- 10 million concurrent users
+- 100 live matches
+- 5 score events/second per match (cricket)
+- Each event ≈ 500 bytes
+
+### Event Rate
+
+```
+100 × 5 = 500 events/sec
+```
+
+### Fan-out
+
+```
+500 events/sec
+
+↓
+
+10 million users
+```
+
+The backend processes only 500 incoming events per second, but must distribute them to millions of WebSocket connections. This fan-out is the primary scalability challenge.
+
+---
+
+# 11. Security / Observability
+
+### Security
+
+- OAuth/JWT authentication for logged-in users
+- Rate limiting on APIs
+- TLS encryption
+- Secure admin dashboard with role-based access
+- Audit logging for score corrections
+
+### Observability
+
+Track
+
+- Event processing latency
+- WebSocket connection count
+- Message delivery latency
+- Cache hit ratio
+- Kafka consumer lag
+- API latency
+- Error rates
+- Notification delivery success
+
+Use centralized logging, metrics, distributed tracing, and alerts.
+
+---
+
+# 12. Trade-offs
+
+| Design Choice                    | Pros                            | Cons                                                                           |
+| -------------------------------- | ------------------------------- | ------------------------------------------------------------------------------ |
+| WebSockets                       | Real-time, low latency          | Persistent connections require more infrastructure                             |
+| Polling                          | Simple to implement             | High bandwidth and server load                                                 |
+| Redis for live scores            | Extremely fast reads            | Data must be kept in sync with the source of truth                             |
+| Event-driven architecture        | Decoupled, scalable, extensible | More operational complexity                                                    |
+| Relational DB for match metadata | Strong consistency              | Less suitable for high-frequency event ingestion than specialized event stores |
+
+---
+
+# Interview-Ready Summary
+
+> "I would build the score tracking app using an event-driven architecture. Live score events from official data providers are ingested into Kafka, processed by the Score Service, cached in Redis, and pushed to clients through WebSocket servers for near real-time updates. Match metadata and historical data are stored in databases, while Redis serves current match state to minimize latency. Independent services consume the same event stream for commentary, notifications, statistics, and analytics, allowing the system to scale horizontally and handle millions of concurrent users during major sporting events."
+
 ## Question 3. How do you design a calendar booking system?
 
 ## Question 4. How do you design a document versioning system?

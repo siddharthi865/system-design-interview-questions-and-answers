@@ -536,6 +536,494 @@ Queries
 
 ## Question 2. How do you prevent cache avalanche, cache stampede, and cache penetration?
 
+# Direct answer
+
+**Cache avalanche**, **cache stampede**, and **cache penetration** are three different cache failure scenarios:
+
+- **Cache avalanche:** Many cache entries expire or become unavailable at the same time, causing a flood of requests to the database.
+- **Cache stampede (dogpile effect):** Multiple requests simultaneously regenerate the same expired cache entry.
+- **Cache penetration:** Requests repeatedly ask for data that doesn't exist, bypassing the cache and hitting the database every time.
+
+Each problem requires different mitigation strategies.
+
+---
+
+# 1. Cache Avalanche
+
+## What is it?
+
+A cache avalanche occurs when **a large number of cache entries become invalid simultaneously**, or the entire cache cluster becomes unavailable.
+
+Example:
+
+```
+1 million keys
+TTL = 1 hour
+
+↓
+
+Exactly after 1 hour
+
+↓
+
+All keys expire
+
+↓
+
+Millions of DB requests
+
+↓
+
+Database overload
+```
+
+## Causes
+
+- Same TTL for all keys
+- Redis cluster failure
+- Cache restart
+- Bulk cache invalidation
+
+---
+
+## Prevention Techniques
+
+### 1. Randomized TTL (Most Common)
+
+Instead of:
+
+```
+TTL = 1 hour
+```
+
+Use:
+
+```
+TTL = 1 hour ± random(0–10 minutes)
+```
+
+Example:
+
+```
+User1 → 61 min
+User2 → 58 min
+User3 → 66 min
+```
+
+Keys expire gradually instead of all at once.
+
+---
+
+### 2. High Availability Cache
+
+Deploy Redis with replication and failover.
+
+```
+           Client
+              |
+        Load Balancer
+              |
+     -------------------
+     |                 |
+ Redis Primary    Redis Replica
+```
+
+This reduces the chance of a complete cache outage.
+
+---
+
+### 3. Warm the Cache
+
+Preload frequently accessed data after:
+
+- Restart
+- Deployment
+- Disaster recovery
+
+Instead of waiting for user traffic to refill the cache.
+
+---
+
+### 4. Multi-Level Cache
+
+```
+Application
+
+↓
+
+Local Cache (L1)
+
+↓
+
+Redis (L2)
+
+↓
+
+Database
+```
+
+If Redis is unavailable, the application may still serve many requests from its local cache.
+
+---
+
+### 5. Rate Limiting
+
+When cache misses spike:
+
+```
+Too many DB requests
+
+↓
+
+Throttle
+
+↓
+
+Protect database
+```
+
+---
+
+# 2. Cache Stampede (Dogpile Effect)
+
+## What is it?
+
+Only **one hot key** expires, but thousands of clients request it simultaneously.
+
+```
+Cache:
+
+Product 100 → expired
+
+↓
+
+10,000 requests
+
+↓
+
+10,000 DB queries
+```
+
+Instead of:
+
+```
+1 DB query
+```
+
+---
+
+## Prevention Techniques
+
+### 1. Distributed Lock (Most Common)
+
+Only one request regenerates the cache.
+
+```
+Request A
+
+↓
+
+Acquire Lock
+
+↓
+
+DB Query
+
+↓
+
+Update Cache
+
+↓
+
+Release Lock
+```
+
+Other requests:
+
+```
+Wait
+
+↓
+
+Read newly populated cache
+```
+
+---
+
+### 2. Single Flight / Request Coalescing
+
+Merge identical concurrent requests.
+
+```
+100 requests
+
+↓
+
+One DB fetch
+
+↓
+
+Shared response
+
+↓
+
+100 clients
+```
+
+Popular libraries provide this pattern.
+
+---
+
+### 3. Stale-While-Revalidate
+
+Serve slightly stale data while refreshing in the background.
+
+```
+Expired
+
+↓
+
+Serve old value
+
+↓
+
+Background refresh
+
+↓
+
+Replace cache
+```
+
+Users get fast responses and the database avoids spikes.
+
+---
+
+### 4. Proactive Refresh
+
+Refresh hot keys before expiration.
+
+```
+TTL remaining
+
+↓
+
+Background worker refreshes
+
+↓
+
+Key never expires during peak traffic
+```
+
+Ideal for dashboards, trending content, and popular products.
+
+---
+
+### 5. Never Expire Hot Keys
+
+For very hot data:
+
+```
+No TTL
+
++
+
+Explicit invalidation
+```
+
+Useful when updates are event-driven.
+
+---
+
+# 3. Cache Penetration
+
+## What is it?
+
+Clients repeatedly request **data that doesn't exist**.
+
+Example:
+
+```
+GET /user/999999999
+
+↓
+
+Cache miss
+
+↓
+
+DB miss
+
+↓
+
+Return 404
+```
+
+Next request repeats the same expensive path.
+
+---
+
+## Prevention Techniques
+
+### 1. Cache Null Results (Most Common)
+
+Store:
+
+```
+User 999999999
+
+↓
+
+NULL
+
+TTL = 1 minute
+```
+
+Next request:
+
+```
+Cache hit
+
+↓
+
+NULL
+
+↓
+
+Return 404
+
+(No DB call)
+```
+
+Use a short TTL to handle newly created records.
+
+---
+
+### 2. Bloom Filter
+
+Maintain a probabilistic set of valid IDs.
+
+```
+Request
+
+↓
+
+Bloom Filter
+
+↓
+
+Probably Exists?
+
+No
+
+↓
+
+Reject immediately
+```
+
+Only likely-valid keys reach Redis or the database.
+
+**Trade-off:**
+
+- No false negatives
+- Possible false positives
+
+---
+
+### 3. Input Validation
+
+Reject obviously invalid requests.
+
+Examples:
+
+```
+Negative IDs
+
+Invalid UUIDs
+
+Malformed keys
+
+Unsupported formats
+```
+
+These never reach the database.
+
+---
+
+### 4. Rate Limiting
+
+Limit abusive clients making repeated invalid requests.
+
+```
+1000 invalid requests/sec
+
+↓
+
+Throttle
+
+↓
+
+Protect backend
+```
+
+---
+
+# Comparison
+
+| Problem           | Cause                                     | Impact                             | Common Solution                                              |
+| ----------------- | ----------------------------------------- | ---------------------------------- | ------------------------------------------------------------ |
+| Cache Avalanche   | Many keys expire together or cache outage | Massive DB traffic spike           | Random TTL, HA cache, cache warming                          |
+| Cache Stampede    | One hot key expires under heavy load      | Duplicate DB work for the same key | Distributed lock, request coalescing, stale-while-revalidate |
+| Cache Penetration | Requests for non-existent data            | Continuous DB misses               | Cache null values, Bloom filter, input validation            |
+
+---
+
+# Combined Architecture
+
+```
+                Client Requests
+                      |
+                API Gateway
+                      |
+              Input Validation
+                      |
+              Bloom Filter Check
+                      |
+                  Cache (Redis)
+                 /             \
+            Cache Hit      Cache Miss
+                               |
+                    Distributed Lock
+                               |
+                         Database Query
+                               |
+          +--------------------+------------------+
+          |                                       |
+   Cache Valid Result                    Cache NULL (short TTL)
+          |
+   Randomized TTL
+          |
+ Background Refresh for Hot Keys
+```
+
+---
+
+# Trade-offs
+
+| Technique              | Pros                                         | Cons                                            |
+| ---------------------- | -------------------------------------------- | ----------------------------------------------- |
+| Randomized TTL         | Prevents synchronized expirations            | Doesn't help individual hot keys                |
+| Distributed Lock       | Eliminates duplicate regeneration            | Lock management adds latency and complexity     |
+| Stale-While-Revalidate | Low latency, good user experience            | Clients may see slightly stale data             |
+| Cache NULL Values      | Stops repeated DB misses                     | Short TTL required if data may be created later |
+| Bloom Filter           | Blocks most invalid requests before cache/DB | False positives and additional maintenance      |
+| Multi-Level Cache      | Reduces dependence on centralized cache      | Cache invalidation becomes more complex         |
+
+---
+
+# Interview-ready summary
+
+> **These three cache issues have different root causes and solutions. Cache avalanche occurs when many keys expire simultaneously or the cache becomes unavailable, and is mitigated with randomized TTLs, high availability, and cache warming. Cache stampede happens when many requests regenerate the same hot key, which is addressed using distributed locks, request coalescing, stale-while-revalidate, or proactive refresh. Cache penetration involves repeated requests for non-existent data and is prevented by caching null results, using Bloom filters to reject invalid keys, validating inputs, and rate limiting abusive clients. Together, these techniques protect both the cache and the database under high load.**
+
 ## Question 3. How would you design a financial transaction ledger system?
 
 ## Question 4. What are the trade-offs of push vs. pull models in notifications?

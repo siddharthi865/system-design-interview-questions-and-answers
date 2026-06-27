@@ -643,6 +643,342 @@ Use distributed tracing to debug slow requests across services.
 
 ## Question 2. How do you design a product recommendation engine at the class diagram level?
 
+# Design a Product Recommendation Engine (LLD / Class Diagram)
+
+## Direct answer
+
+At the class diagram level, a product recommendation engine should separate responsibilities into:
+
+- **Recommendation strategies** (Collaborative Filtering, Content-Based, Trending, etc.)
+- **Recommendation engine** (orchestrates recommendation generation)
+- **Feature providers** (user behavior, product metadata)
+- **Ranking service** (scores and sorts candidates)
+- **Repositories** (fetch data)
+- **Recommendation models** (User, Product, Recommendation)
+
+A good LLD uses the **Strategy Pattern**, making it easy to plug in new recommendation algorithms without modifying the engine.
+
+---
+
+# Core Classes
+
+```text
+                +----------------------+
+                | RecommendationEngine |
+                +----------------------+
+                | strategy             |
+                | rankingService       |
+                | repository           |
+                +----------------------+
+                | recommend(userId)    |
+                +----------+-----------+
+                           |
+                           |
+              uses RecommendationStrategy
+                           |
+          ------------------------------------
+          |                 |                |
+          |                 |                |
++----------------+  +----------------+ +----------------+
+| Collaborative  |  | ContentBased   | | Trending       |
+| Strategy       |  | Strategy       | | Strategy       |
++----------------+  +----------------+ +----------------+
+| recommend()    |  | recommend()    | | recommend()    |
++----------------+  +----------------+ +----------------+
+
+                |
+                |
+        ProductRepository
+                |
+      -------------------
+      |                 |
+    Product          UserHistory
+
+                |
+        RankingService
+                |
+         Recommendation
+```
+
+---
+
+# Main Classes
+
+## User
+
+```javascript
+class User {
+  constructor(id, preferences = []) {
+    this.id = id;
+    this.preferences = preferences;
+  }
+}
+```
+
+---
+
+## Product
+
+```javascript
+class Product {
+  constructor(id, category, tags, rating) {
+    this.id = id;
+    this.category = category;
+    this.tags = tags;
+    this.rating = rating;
+  }
+}
+```
+
+---
+
+## Recommendation
+
+```javascript
+class Recommendation {
+  constructor(product, score) {
+    this.product = product;
+    this.score = score;
+  }
+}
+```
+
+---
+
+# Strategy Interface
+
+```javascript
+class RecommendationStrategy {
+  recommend(user, repository) {
+    throw new Error("Implement recommend()");
+  }
+}
+```
+
+This is the abstraction that allows different recommendation algorithms.
+
+---
+
+# Concrete Strategies
+
+## Collaborative Filtering
+
+```javascript
+class CollaborativeFilteringStrategy extends RecommendationStrategy {
+  recommend(user, repository) {
+    // Find similar users
+    // Recommend products they liked
+  }
+}
+```
+
+---
+
+## Content-Based Filtering
+
+```javascript
+class ContentBasedStrategy extends RecommendationStrategy {
+  recommend(user, repository) {
+    // Match products with user interests
+  }
+}
+```
+
+---
+
+## Trending Products
+
+```javascript
+class TrendingStrategy extends RecommendationStrategy {
+  recommend(user, repository) {
+    // Return globally popular products
+  }
+}
+```
+
+---
+
+## Hybrid Strategy
+
+Combines multiple algorithms.
+
+```javascript
+class HybridStrategy extends RecommendationStrategy {
+  constructor(strategies) {
+    super();
+    this.strategies = strategies;
+  }
+
+  recommend(user, repository) {
+    let results = [];
+
+    for (const strategy of this.strategies) {
+      results.push(...strategy.recommend(user, repository));
+    }
+
+    return results;
+  }
+}
+```
+
+---
+
+# Product Repository
+
+Responsible for fetching data.
+
+```javascript
+class ProductRepository {
+  getProducts() {}
+
+  getProduct(id) {}
+
+  getUserHistory(userId) {}
+
+  getPopularProducts() {}
+}
+```
+
+The recommendation engine doesn't know where data comes from (SQL, NoSQL, cache, ML feature store, etc.).
+
+---
+
+# Ranking Service
+
+Multiple strategies may return hundreds of candidates.
+
+Ranking decides the final order.
+
+```javascript
+class RankingService {
+  rank(products) {
+    return products.sort((a, b) => b.score - a.score);
+  }
+}
+```
+
+In production, ranking often incorporates signals such as:
+
+- User affinity
+- Click-through rate (CTR)
+- Purchase probability
+- Product popularity
+- Freshness
+- Diversity
+- Business rules (e.g., sponsored items)
+
+---
+
+# Recommendation Engine
+
+The orchestrator.
+
+```javascript
+class RecommendationEngine {
+  constructor(strategy, repository, rankingService) {
+    this.strategy = strategy;
+    this.repository = repository;
+    this.rankingService = rankingService;
+  }
+
+  recommend(user) {
+    const candidates = this.strategy.recommend(user, this.repository);
+
+    return this.rankingService.rank(candidates);
+  }
+}
+```
+
+The engine doesn't implement recommendation logic itself—it delegates to the selected strategy and then ranks the results.
+
+---
+
+# Supporting Classes
+
+## UserHistory
+
+```javascript
+class UserHistory {
+  constructor(userId) {
+    this.userId = userId;
+    this.viewed = [];
+    this.clicked = [];
+    this.purchased = [];
+  }
+}
+```
+
+---
+
+## Feature Store
+
+```javascript
+class FeatureStore {
+  getUserFeatures(userId) {}
+
+  getProductFeatures(productId) {}
+}
+```
+
+This abstracts access to precomputed ML features used during recommendation.
+
+---
+
+## Recommendation Cache
+
+```javascript
+class RecommendationCache {
+  get(userId) {}
+
+  put(userId, recommendations) {}
+}
+```
+
+Popular recommendation lists can be cached to reduce latency.
+
+---
+
+# Design Patterns Used
+
+| Pattern                         | Usage                                                                              |
+| ------------------------------- | ---------------------------------------------------------------------------------- |
+| **Strategy**                    | Switch between recommendation algorithms without changing the engine.              |
+| **Repository**                  | Abstract data access from business logic.                                          |
+| **Dependency Injection**        | Inject strategies, repositories, and ranking services for flexibility and testing. |
+| **Composite (Hybrid Strategy)** | Combine outputs from multiple recommendation strategies.                           |
+
+---
+
+# Extensibility
+
+Adding a new recommendation algorithm requires no changes to the engine:
+
+```javascript
+class RecentlyViewedStrategy extends RecommendationStrategy {
+  recommend(user, repository) {
+    // Recommend products similar to recently viewed items
+  }
+}
+```
+
+Then simply inject it:
+
+```javascript
+const strategy = new HybridStrategy([
+  new CollaborativeFilteringStrategy(),
+  new ContentBasedStrategy(),
+  new RecentlyViewedStrategy(),
+]);
+```
+
+This adheres to the **Open/Closed Principle**—the engine is open for extension but closed for modification.
+
+---
+
+# Interview-ready Summary
+
+> "For the LLD, I'd model the recommendation engine around the Strategy pattern. The `RecommendationEngine` orchestrates the flow, delegating candidate generation to interchangeable `RecommendationStrategy` implementations like Collaborative Filtering, Content-Based, Trending, or Hybrid. A `ProductRepository` abstracts data access, a `FeatureStore` provides user and product features, and a `RankingService` scores and orders candidates. This design is modular, testable, and extensible, allowing new recommendation algorithms to be added without changing the engine itself."
+
 ## Question 3. How do you design a loyalty points system?
 
 ## Question 4. How do you design a micro-billing system for pay-per-use services?

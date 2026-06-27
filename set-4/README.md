@@ -254,6 +254,292 @@ Example: Storing billions of user events per day.
 
 ## Question 2. When should you use SQL over NoSQL and vice versa?
 
+# Direct Answer
+
+The choice depends on the **data model, consistency requirements, and scale**.
+
+- Use **SQL** when you need **strong consistency, transactions, and complex relationships** between data.
+- Use **NoSQL** when you need **massive horizontal scalability, flexible schemas, and very high read/write throughput**.
+
+In practice, many large systems use **both** (polyglot persistence).
+
+---
+
+# When to Use SQL
+
+Choose SQL databases when:
+
+### 1. Strong ACID Transactions Are Required
+
+Example:
+
+- Banking
+- Payments
+- Trading systems
+- Order processing
+
+A money transfer must never leave the system in an inconsistent state.
+
+```text
+Debit Account A
+Credit Account B
+```
+
+Either both succeed or both fail.
+
+---
+
+### 2. Data Has Complex Relationships
+
+Example:
+
+```text
+Users
+Orders
+Products
+Payments
+Reviews
+```
+
+These entities are connected and often queried together.
+
+SQL databases handle:
+
+- Joins
+- Foreign keys
+- Referential integrity
+
+efficiently.
+
+---
+
+### 3. Data Schema Is Stable
+
+Example:
+
+```text
+Customer
+ ├── Name
+ ├── Email
+ └── Address
+```
+
+Fields don't change frequently.
+
+---
+
+### 4. Complex Queries and Reporting
+
+Example:
+
+```sql
+SELECT region,
+       SUM(revenue)
+FROM orders
+GROUP BY region;
+```
+
+Analytics, reporting, aggregations, and ad-hoc queries are usually easier in SQL.
+
+---
+
+# Typical SQL Use Cases
+
+| System               | Why SQL?              |
+| -------------------- | --------------------- |
+| Banking              | Strong consistency    |
+| Payment Gateway      | ACID transactions     |
+| ERP Systems          | Complex relationships |
+| Inventory Management | Data integrity        |
+| Order Management     | Transactions + joins  |
+| CRM                  | Structured data       |
+
+---
+
+# When to Use NoSQL
+
+Choose NoSQL when:
+
+### 1. Massive Scale Is Required
+
+Example:
+
+```text
+Billions of events/day
+Millions of users
+Thousands of writes/sec
+```
+
+NoSQL systems are designed for horizontal scaling.
+
+---
+
+### 2. Schema Changes Frequently
+
+Example:
+
+User profiles:
+
+```json
+{
+  "name": "John",
+  "age": 25
+}
+```
+
+Later:
+
+```json
+{
+  "name": "John",
+  "age": 25,
+  "linkedin": "...",
+  "skills": [...]
+}
+```
+
+No migration required.
+
+---
+
+### 3. Denormalized Data Works Better
+
+Instead of joining multiple tables:
+
+```text
+Users
+Orders
+Products
+```
+
+Store everything together:
+
+```json
+{
+  "userId": 123,
+  "orders": [...]
+}
+```
+
+Faster reads.
+
+---
+
+### 4. High Write Throughput Is Needed
+
+Examples:
+
+- Clickstream data
+- Logs
+- Metrics
+- IoT telemetry
+
+Millions of writes per second can be distributed across nodes.
+
+---
+
+# Typical NoSQL Use Cases
+
+| System                 | Why NoSQL?            |
+| ---------------------- | --------------------- |
+| Social Media Feed      | Massive scale         |
+| Event Tracking         | High write throughput |
+| IoT Data               | Flexible schema       |
+| User Activity Logs     | Large volume          |
+| Recommendation Systems | Fast lookups          |
+| Real-Time Analytics    | Distributed storage   |
+
+---
+
+# Real-World Examples
+
+### E-commerce System
+
+A common interview answer:
+
+```text
+                 E-commerce
+                      |
+      +---------------+---------------+
+      |                               |
+   SQL DB                         NoSQL DB
+      |                               |
+ Orders, Payments,             User Activity,
+ Inventory, Users              Clickstream,
+                               Recommendations
+```
+
+### Why?
+
+**Orders and Payments**
+
+- Require transactions
+- Require consistency
+- Use SQL
+
+**User Behavior Events**
+
+- Massive scale
+- Append-heavy writes
+- Use NoSQL
+
+---
+
+# Trade-offs
+
+| Factor                 | SQL             | NoSQL                         |
+| ---------------------- | --------------- | ----------------------------- |
+| Consistency            | Strong          | Often eventual                |
+| Transactions           | Excellent       | Limited                       |
+| Joins                  | Excellent       | Weak/None                     |
+| Horizontal Scaling     | Harder          | Easier                        |
+| Schema Flexibility     | Low             | High                          |
+| Query Complexity       | Powerful        | Simpler                       |
+| Write Throughput       | Moderate        | Very high                     |
+| Operational Complexity | Lower initially | Higher distributed complexity |
+
+---
+
+# Interview Rule of Thumb
+
+A simple interview framework:
+
+### Choose SQL if:
+
+- Data correctness is critical
+- Transactions are required
+- Relationships are important
+- Complex queries are common
+
+Examples:
+
+- Banking
+- Payments
+- Inventory
+- Order Management
+
+---
+
+### Choose NoSQL if:
+
+- Scale is the biggest challenge
+- Data model evolves frequently
+- Reads/writes are extremely high
+- Data can tolerate eventual consistency
+
+Examples:
+
+- Social feeds
+- Analytics
+- Logging
+- IoT
+
+---
+
+# Interview-Ready Summary
+
+> Use SQL when you need strong consistency, ACID transactions, and relational data with complex queries. Use NoSQL when you need horizontal scalability, flexible schemas, and very high read/write throughput. In large-scale systems, it's common to use SQL for transactional data such as orders and payments, and NoSQL for high-volume data such as user activity, logs, feeds, and analytics.
+
 ## Question 3. What is database normalization?
 
 ## Question 4. What is denormalization and when is it useful?

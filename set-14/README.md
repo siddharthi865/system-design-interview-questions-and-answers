@@ -327,6 +327,297 @@ This provides both efficient recovery and minimal data loss.
 
 ## Question 2. What is log replication?
 
+# Log Replication in Distributed Systems
+
+## Direct answer
+
+**Log replication** is the process of copying a sequence of operations (a log) from a **leader node** to one or more **follower nodes** so that all replicas execute the same operations in the same order and remain consistent.
+
+Instead of directly copying the database state, distributed systems replicate the **operations (commands)** that modify the state. This approach is the foundation of consensus algorithms like **Raft** and **Paxos**.
+
+---
+
+## Why do we replicate logs instead of data?
+
+Suppose a banking service receives this transaction:
+
+```text
+Transfer ₹500 from A to B
+```
+
+Instead of sending the updated account balances to every replica, the leader appends this command to its log:
+
+```text
+Entry #101:
+Transfer ₹500 from A to B
+```
+
+This log entry is then replicated to followers.
+
+Once every replica applies the same log entry in the same order:
+
+```text
+Account A -= 500
+Account B += 500
+```
+
+All replicas reach the same final state.
+
+**Key idea:** Replicate **operations**, not the resulting data.
+
+---
+
+## High-level architecture
+
+```text
+                 Client
+                    │
+                    ▼
+              +-------------+
+              |   Leader    |
+              +-------------+
+                    │
+         Append log entry
+                    │
+      ┌─────────────┼─────────────┐
+      ▼             ▼             ▼
++-----------+ +-----------+ +-----------+
+| Follower1 | | Follower2 | | Follower3 |
++-----------+ +-----------+ +-----------+
+      │             │             │
+ Apply entry    Apply entry   Apply entry
+```
+
+The leader is responsible for accepting writes and ensuring followers receive log entries.
+
+---
+
+## How log replication works
+
+### Step 1: Client sends a write request
+
+```text
+Client:
+Deposit ₹1000
+```
+
+---
+
+### Step 2: Leader appends to its log
+
+```text
+Leader Log
+
+1
+2
+3
+4 Deposit ₹1000
+```
+
+The entry is not yet considered committed.
+
+---
+
+### Step 3: Leader replicates the log
+
+```text
+Leader
+   │
+AppendEntries
+   │
+────────────► Followers
+```
+
+Followers append the same entry to their logs.
+
+---
+
+### Step 4: Majority acknowledges
+
+Example with five replicas:
+
+```text
+Leader      ✓
+
+Follower1   ✓
+
+Follower2   ✓
+
+Follower3   ✗
+
+Follower4   ✗
+```
+
+Three out of five nodes acknowledge the entry, forming a majority.
+
+---
+
+### Step 5: Commit
+
+The leader marks the entry as committed and informs followers.
+
+```text
+Committed
+
+1
+2
+3
+4 Deposit ₹1000
+```
+
+Now every node applies the operation to its local database.
+
+---
+
+## Why is ordering important?
+
+Consider two operations:
+
+```text
+Withdraw ₹500
+Deposit ₹1000
+```
+
+Correct order:
+
+```text
+Balance = 1000
+
+Withdraw 500 → 500
+
+Deposit 1000 → 1500
+```
+
+If another replica executes:
+
+```text
+Deposit 1000
+
+Withdraw 500
+```
+
+It may temporarily observe a different state, and with more complex operations the final result can diverge.
+
+Log replication guarantees that **every replica executes the exact same ordered sequence of operations**, ensuring deterministic state.
+
+---
+
+## Components of a log entry
+
+A log entry typically contains:
+
+```text
+Index
+Term (or Version)
+Command
+Timestamp (optional)
+Checksum (optional)
+```
+
+Example:
+
+```text
+Index : 52
+
+Term  : 8
+
+Command :
+Transfer(A,B,500)
+```
+
+---
+
+## Benefits of log replication
+
+- Keeps replicas consistent
+- Enables fault tolerance
+- Supports automatic leader failover
+- Preserves operation ordering
+- Simplifies recovery after crashes
+- Forms the basis of distributed consensus
+
+---
+
+## Failure handling
+
+Suppose the leader crashes after replicating to two followers.
+
+```text
+Leader (crashed)
+
+Follower A ✓
+
+Follower B ✓
+
+Follower C
+```
+
+If the entry was replicated to a **majority**, one of those followers can become the new leader, and the committed log entry is preserved.
+
+If the entry never reached a majority, it is discarded to maintain consistency.
+
+---
+
+## Log replication vs State replication
+
+| Log Replication              | State Replication                               |
+| ---------------------------- | ----------------------------------------------- |
+| Replicates operations        | Replicates entire data                          |
+| Lower network bandwidth      | Higher bandwidth                                |
+| Preserves operation order    | Focuses on final state                          |
+| Easier recovery and replay   | Simpler but less efficient for frequent updates |
+| Used by consensus algorithms | Used for snapshots or backups                   |
+
+---
+
+## Log replication vs Checkpointing
+
+| Log Replication                    | Checkpointing                                        |
+| ---------------------------------- | ---------------------------------------------------- |
+| Replicates every write operation   | Saves a snapshot of the system state                 |
+| Ensures replicas stay synchronized | Enables recovery after failures                      |
+| Continuous process                 | Periodic process                                     |
+| Supports high availability         | Reduces recovery time                                |
+| Usually combined with snapshots    | Often restores a snapshot and replays logs afterward |
+
+In many systems, recovery works like this:
+
+```text
+Latest Snapshot
+        │
+        ▼
+Replay Log Entries
+        │
+        ▼
+Current State
+```
+
+---
+
+## Real-world examples
+
+- Apache Kafka replicates partition logs across brokers for durability and availability.
+- etcd uses the Raft consensus algorithm to replicate logs across cluster members.
+- Apache ZooKeeper uses a replicated transaction log to keep all servers synchronized.
+- Many distributed SQL and NoSQL databases use write-ahead logs combined with log replication to ensure consistency and durability.
+
+---
+
+## Trade-offs
+
+| Advantages         | Disadvantages                                         |
+| ------------------ | ----------------------------------------------------- |
+| Strong consistency | Additional network overhead                           |
+| High availability  | Increased write latency due to replication            |
+| Fault tolerance    | More complex leader election and recovery             |
+| Ordered execution  | Storage required for logs until they can be compacted |
+
+---
+
+## Interview-ready summary
+
+> **Log replication is the process of copying an ordered sequence of write operations from a leader to follower replicas. Instead of replicating the entire database state, systems replicate commands, ensuring every replica executes the same operations in the same order. Once a majority of replicas acknowledge a log entry, it is committed and applied, providing consistency, durability, and fault tolerance. Consensus algorithms like Raft and Paxos rely on log replication as their core mechanism, and production systems often combine replicated logs with periodic snapshots for efficient recovery.**
+
 ## Question 3. What is data reconciliation?
 
 ## Question 4. How do you detect failures in distributed systems?

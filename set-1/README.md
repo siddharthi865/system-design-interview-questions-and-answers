@@ -465,6 +465,186 @@ In an **Object-Oriented Design (OOD/LLD) Interview**, interviewers expect:
 
 ## Question 3. What are functional and non-functional requirements in system design?
 
+# Direct answer
+
+**Functional requirements** define **what a system should do**—the features and behaviors users expect.
+
+**Non-functional requirements (NFRs)** define **how well the system should perform those functions**—such as scalability, availability, latency, reliability, and security.
+
+A simple way to remember:
+
+- **Functional Requirements = Features**
+- **Non-Functional Requirements = Quality Attributes**
+
+---
+
+# Functional Requirements
+
+Functional requirements describe the business capabilities of the system.
+
+They answer:
+
+> "What should the system do?"
+
+### Examples
+
+For a URL Shortener:
+
+- User can submit a long URL.
+- System generates a short URL.
+- User can access the original URL using the short URL.
+- User can delete a shortened URL.
+- User can view click statistics.
+
+For a Food Delivery App:
+
+- Browse restaurants.
+- Search for food.
+- Place orders.
+- Make payments.
+- Track deliveries.
+
+---
+
+# Non-Functional Requirements
+
+Non-functional requirements describe system qualities and constraints.
+
+They answer:
+
+> "How should the system behave?"
+
+### Common NFRs
+
+| Category        | Example                               |
+| --------------- | ------------------------------------- |
+| Scalability     | Handle 10 million users               |
+| Availability    | 99.99% uptime                         |
+| Latency         | Response time < 200 ms                |
+| Reliability     | No data loss during failures          |
+| Durability      | Orders persist even after crashes     |
+| Security        | Data encrypted in transit and at rest |
+| Consistency     | Users see correct data                |
+| Throughput      | Process 100,000 requests/sec          |
+| Maintainability | Easy to update and debug              |
+| Observability   | Metrics, logs, tracing                |
+
+---
+
+# Example: URL Shortener
+
+## Functional Requirements
+
+- Create short URLs.
+- Redirect users to original URLs.
+- Support custom aliases.
+- Track click counts.
+
+## Non-Functional Requirements
+
+- Redirect latency < 50 ms.
+- 99.99% availability.
+- Support 100 million URLs.
+- Handle 100,000 redirects/sec.
+- No loss of URL mappings.
+
+---
+
+# Example: Instagram
+
+## Functional Requirements
+
+- Upload photos.
+- Follow users.
+- Like posts.
+- View feeds.
+- Send messages.
+
+## Non-Functional Requirements
+
+- Feed loads within 200 ms.
+- Store billions of photos.
+- Support millions of concurrent users.
+- Highly available worldwide.
+- Secure user data.
+
+---
+
+# Why are Non-Functional Requirements important?
+
+Many systems can satisfy functional requirements.
+
+The challenge is satisfying them **at scale**.
+
+For example:
+
+Two systems may both support "upload a photo."
+
+| System A                | System B                   |
+| ----------------------- | -------------------------- |
+| Upload takes 10 seconds | Upload takes 500 ms        |
+| Frequently crashes      | Highly available           |
+| Doesn't scale           | Supports millions of users |
+
+Both meet the functional requirement.
+
+Only one meets the non-functional requirements.
+
+This is why system design interviews focus heavily on NFRs.
+
+---
+
+# How system design interviews use them
+
+A typical interview starts by gathering requirements.
+
+Example:
+
+**Design Twitter**
+
+Functional requirements:
+
+- Post tweets.
+- Follow users.
+- View timeline.
+- Like tweets.
+
+Non-functional requirements:
+
+- Millions of daily active users.
+- Timeline should load quickly.
+- High availability.
+- Eventual consistency is acceptable for likes.
+- Global scale.
+
+These NFRs heavily influence architectural decisions such as:
+
+- Caching
+- Database selection
+- Replication strategy
+- Sharding
+- Load balancing
+
+---
+
+# Common mistake in interviews
+
+Many candidates spend all their time discussing features:
+
+❌ "Users can create posts, comment, and like."
+
+Strong candidates quickly move to:
+
+✅ "We expect 100M users, need 99.99% availability, feed latency under 200 ms, and eventual consistency is acceptable."
+
+Those requirements drive the architecture.
+
+---
+
+# Interview-ready summary
+
+> Functional requirements define what the system must do, such as creating posts, sending messages, or processing payments. Non-functional requirements define how well the system must perform, including scalability, availability, latency, reliability, security, and consistency. In system design, non-functional requirements are often the primary drivers of architectural decisions because they determine how the system behaves under real-world scale and failures.
+
 ## Question 4. What is scalability in system design?
 
 ## Question 5. What is the difference between vertical scaling and horizontal scaling?

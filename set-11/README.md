@@ -558,6 +558,299 @@ Some widely used ETL and data processing tools include:
 
 ## Question 3. What is data warehousing and how does it differ from OLTP?
 
+# Data Warehousing vs OLTP
+
+## Direct answer
+
+A **data warehouse** is a centralized repository designed for **analytics, reporting, and business intelligence (OLAP)**. It stores large volumes of historical data from multiple sources and is optimized for complex read-heavy queries.
+
+An **OLTP (Online Transaction Processing)** system is designed to **handle day-to-day business transactions** such as creating orders, processing payments, or updating inventory. It is optimized for fast, reliable, concurrent reads and writes.
+
+In short:
+
+- **OLTP = Run the business**
+- **Data Warehouse (OLAP) = Analyze the business**
+
+---
+
+## Purpose
+
+### OLTP
+
+Supports operational applications.
+
+Examples:
+
+- Placing an order
+- Booking a ticket
+- Banking transactions
+- Updating inventory
+- User login
+
+Characteristics:
+
+- Thousands to millions of small transactions
+- Low latency
+- High concurrency
+- Strong consistency
+
+---
+
+### Data Warehouse
+
+Supports analytics and decision-making.
+
+Examples:
+
+- Monthly revenue reports
+- Sales trends
+- Customer segmentation
+- Forecasting
+- Executive dashboards
+
+Characteristics:
+
+- Large analytical queries
+- Historical data
+- Read-heavy workloads
+- Complex aggregations
+
+---
+
+## Architecture
+
+### OLTP System
+
+```text
+Users
+   │
+   ▼
+Application Servers
+   │
+   ▼
+Operational Database
+```
+
+The application reads and writes directly to the operational database.
+
+---
+
+### Data Warehouse
+
+```text
+Operational DBs
+CRM
+Payment System
+Logs
+Inventory
+      │
+      ▼
+ETL / ELT Pipeline
+      │
+      ▼
+Data Warehouse
+      │
+      ▼
+BI Dashboards
+Data Analysts
+ML Models
+```
+
+Data from multiple operational systems is periodically or continuously loaded into the warehouse.
+
+---
+
+## Comparison
+
+| Feature       | OLTP                       | Data Warehouse (OLAP)                        |
+| ------------- | -------------------------- | -------------------------------------------- |
+| Purpose       | Process transactions       | Analytics and reporting                      |
+| Data          | Current operational data   | Historical integrated data                   |
+| Workload      | Read + Write               | Mostly Read                                  |
+| Query type    | Simple CRUD operations     | Complex aggregations and joins               |
+| Response time | Milliseconds               | Seconds to minutes (depending on query size) |
+| Users         | Applications and end users | Analysts, BI tools, data scientists          |
+| Data volume   | Current records            | Years of historical data                     |
+| Schema        | Highly normalized          | Often denormalized (star/snowflake schemas)  |
+| Updates       | Continuous                 | Periodic batch or streaming loads            |
+| Optimization  | Fast transactions          | Fast analytical queries                      |
+
+---
+
+## Example
+
+### OLTP Database
+
+An e-commerce application stores each order.
+
+```text
+Orders
+
+OrderID
+CustomerID
+ProductID
+Quantity
+Price
+Timestamp
+```
+
+Typical query:
+
+```sql
+SELECT * FROM Orders
+WHERE OrderID = 12345;
+```
+
+Returns one record very quickly.
+
+---
+
+### Data Warehouse
+
+Stores years of sales history.
+
+Typical query:
+
+```sql
+Revenue by country
+for the last five years
+grouped by month
+```
+
+This query may scan billions of rows and aggregate large datasets efficiently.
+
+---
+
+## Why not run analytics on OLTP?
+
+Suppose an online shopping site receives:
+
+- 20,000 orders per second
+- Millions of customers browsing
+
+If an analyst runs:
+
+```sql
+SELECT
+Country,
+SUM(Sales)
+FROM Orders
+GROUP BY Country;
+```
+
+on the production database:
+
+- Large table scans consume CPU and I/O.
+- Customer transactions slow down.
+- User experience degrades.
+- Lock contention may increase (depending on the database and isolation level).
+
+A separate data warehouse isolates analytical workloads from transactional workloads.
+
+---
+
+## Data flow
+
+```text
+Users
+   │
+   ▼
+OLTP Database
+   │
+   ▼
+ETL / ELT
+   │
+   ▼
+Data Warehouse
+   │
+   ▼
+Reports
+Dashboards
+ML
+```
+
+This separation allows each system to be optimized for its specific workload.
+
+---
+
+## Schema design
+
+### OLTP
+
+Typically uses **normalized** schemas to reduce redundancy and maintain data integrity.
+
+Example:
+
+```text
+Customers
+Orders
+Products
+Payments
+```
+
+Benefits:
+
+- Minimal duplication
+- Efficient updates
+- Strong referential integrity
+
+---
+
+### Data Warehouse
+
+Often uses **denormalized** schemas to speed up analytical queries.
+
+Common models:
+
+- **Star Schema**: One central fact table connected to multiple dimension tables.
+- **Snowflake Schema**: Dimension tables are further normalized.
+
+Example:
+
+```text
+          Product
+             │
+Customer ─ Sales Fact ─ Date
+             │
+          Store
+```
+
+Benefits:
+
+- Fewer joins
+- Faster aggregations
+- Better analytical performance
+
+---
+
+## Design considerations
+
+A well-designed data warehouse typically includes:
+
+- **Columnar storage** for efficient scans of selected columns.
+- **Partitioning** (often by date) to reduce the amount of data scanned.
+- **Compression** to lower storage costs and improve I/O.
+- **Materialized views** or precomputed aggregates for frequently used reports.
+- **Incremental ETL/ELT** using Change Data Capture (CDC) to avoid full reloads.
+- **Data quality checks** to validate incoming data before analysis.
+
+---
+
+## Trade-offs
+
+| OLTP                            | Data Warehouse                             |
+| ------------------------------- | ------------------------------------------ |
+| Excellent for transactions      | Poor for transactional updates             |
+| Highly consistent               | Data may be slightly delayed due to ETL    |
+| Supports many concurrent writes | Optimized for large scans and aggregations |
+| Smaller working dataset         | Stores massive historical datasets         |
+
+---
+
+## Interview-ready summary
+
+> **OLTP systems** power day-to-day business operations and are optimized for fast, concurrent transactional workloads using normalized schemas. **Data warehouses (OLAP)** consolidate historical data from multiple sources through ETL/ELT pipelines and are optimized for analytical queries using denormalized schemas. Separating OLTP and OLAP workloads improves application performance while enabling efficient reporting, business intelligence, and machine learning on large historical datasets.
+
 ## Question 4. What is a distributed transaction?
 
 ## Question 5. Explain the concept of ACID in databases

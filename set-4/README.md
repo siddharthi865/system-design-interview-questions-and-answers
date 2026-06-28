@@ -542,6 +542,297 @@ Examples:
 
 ## Question 3. What is database normalization?
 
+# Direct Answer
+
+**Database normalization** is the process of organizing data in a database to **reduce redundancy (duplicate data)** and **improve data integrity** by splitting data into related tables and defining relationships between them.
+
+The main goal is:
+
+> **Store each piece of information only once and avoid update, insert, and delete anomalies.**
+
+---
+
+# Why Do We Need Normalization?
+
+Consider a single table:
+
+| OrderId | CustomerName | CustomerEmail                         | Product  | Price |
+| ------- | ------------ | ------------------------------------- | -------- | ----- |
+| 101     | John         | [john@test.com](mailto:john@test.com) | Laptop   | 1000  |
+| 102     | John         | [john@test.com](mailto:john@test.com) | Mouse    | 20    |
+| 103     | John         | [john@test.com](mailto:john@test.com) | Keyboard | 50    |
+
+Problems:
+
+### Data Redundancy
+
+```text
+John
+john@test.com
+```
+
+are repeated in every row.
+
+### Update Anomaly
+
+If John's email changes:
+
+```text
+john@test.com
+→
+john123@test.com
+```
+
+Every row must be updated.
+
+### Delete Anomaly
+
+If Order 103 is deleted and it was the last order, customer information may be lost.
+
+### Insert Anomaly
+
+Cannot add a customer until they place an order.
+
+---
+
+# Normalized Design
+
+Split the data into separate tables.
+
+### Customers
+
+| CustomerId | Name | Email                                 |
+| ---------- | ---- | ------------------------------------- |
+| 1          | John | [john@test.com](mailto:john@test.com) |
+
+### Orders
+
+| OrderId | CustomerId |
+| ------- | ---------- |
+| 101     | 1          |
+| 102     | 1          |
+| 103     | 1          |
+
+### Products
+
+| ProductId | Name     | Price |
+| --------- | -------- | ----- |
+| 1         | Laptop   | 1000  |
+| 2         | Mouse    | 20    |
+| 3         | Keyboard | 50    |
+
+Now customer data exists only once.
+
+---
+
+# Normal Forms
+
+Normalization is usually discussed in terms of **Normal Forms (NF)**.
+
+---
+
+## First Normal Form (1NF)
+
+### Rule
+
+- Each column contains atomic values.
+- No repeating groups or arrays.
+
+### Bad
+
+| UserId | Phones  |
+| ------ | ------- |
+| 1      | 123,456 |
+
+### Good
+
+| UserId | Phone |
+| ------ | ----- |
+| 1      | 123   |
+| 1      | 456   |
+
+---
+
+## Second Normal Form (2NF)
+
+### Rule
+
+- Must already be in 1NF.
+- No partial dependency on a composite primary key.
+
+Example:
+
+| StudentId | CourseId | StudentName |
+| --------- | -------- | ----------- |
+
+Primary Key:
+
+```text
+(StudentId, CourseId)
+```
+
+Problem:
+
+```text
+StudentName
+depends only on StudentId
+```
+
+not on the full key.
+
+Move student information to a separate table.
+
+---
+
+## Third Normal Form (3NF)
+
+### Rule
+
+- Must already be in 2NF.
+- No transitive dependencies.
+
+Example:
+
+| EmployeeId | DepartmentId | DepartmentName |
+| ---------- | ------------ | -------------- |
+
+Problem:
+
+```text
+EmployeeId
+   ↓
+DepartmentId
+   ↓
+DepartmentName
+```
+
+DepartmentName depends on DepartmentId, not directly on EmployeeId.
+
+Split into:
+
+### Employees
+
+| EmployeeId | DepartmentId |
+
+### Departments
+
+| DepartmentId | DepartmentName |
+
+---
+
+# Before vs After Normalization
+
+### Unnormalized
+
+```text
+Orders
+ ├── CustomerName
+ ├── CustomerEmail
+ ├── ProductName
+ └── Price
+```
+
+### Normalized
+
+```text
+Customers
+     |
+     |
+Orders
+     |
+     |
+Products
+```
+
+Each entity is stored separately.
+
+---
+
+# Advantages
+
+### Reduced Data Redundancy
+
+Less duplicate data.
+
+### Better Data Integrity
+
+One source of truth.
+
+### Easier Updates
+
+Update customer email once.
+
+### Smaller Storage
+
+Less duplicated information.
+
+### Consistent Data
+
+Fewer chances of conflicting values.
+
+---
+
+# Disadvantages
+
+### More Joins
+
+Data is spread across multiple tables.
+
+```sql
+SELECT *
+FROM Orders o
+JOIN Customers c
+ON o.customerId = c.id;
+```
+
+More joins can increase query complexity.
+
+### Slightly Slower Reads
+
+Complex read-heavy workloads may require multiple table joins.
+
+---
+
+# Normalization vs Denormalization
+
+| Normalization          | Denormalization                        |
+| ---------------------- | -------------------------------------- |
+| Reduces redundancy     | Introduces redundancy                  |
+| Better consistency     | Better read performance                |
+| More joins             | Fewer joins                            |
+| Smaller storage        | Larger storage                         |
+| Ideal for OLTP systems | Ideal for analytics/read-heavy systems |
+
+---
+
+# System Design Perspective
+
+In system design interviews:
+
+### Use Normalization For
+
+- Banking systems
+- Payment systems
+- Inventory management
+- Order management
+
+Where consistency is critical.
+
+### Use Denormalization For
+
+- Social media feeds
+- Recommendation systems
+- Search indexes
+- Analytics systems
+
+Where read performance is more important than perfect normalization.
+
+---
+
+# Interview-Ready Summary
+
+> Database normalization is the process of organizing data into related tables to minimize redundancy and improve data integrity. The most commonly used level is 3NF, where duplicate data and transitive dependencies are removed. Normalization improves consistency and maintainability but may require additional joins, which is why large-scale read-heavy systems sometimes use denormalization for better performance.
+
 ## Question 4. What is denormalization and when is it useful?
 
 ## Question 5. What are the different types of NoSQL databases?

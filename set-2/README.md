@@ -757,6 +757,353 @@ The core components of a distributed system are clients, load balancers, applica
 
 ## Question 3. Explain client-server architecture
 
+## Direct answer
+
+**Client-server architecture** is a distributed computing model where **clients** send requests for services or data, and **servers** process those requests and return responses.
+
+The client is responsible for the user interface and user interactions, while the server is responsible for business logic, data processing, and storage.
+
+---
+
+## Basic Concept
+
+```text
++---------+      Request      +---------+
+| Client  | ----------------> | Server  |
+|         | <---------------- |         |
++---------+      Response     +---------+
+```
+
+Examples:
+
+- A web browser requesting a webpage.
+- A mobile app fetching user profiles.
+- An ATM querying a banking server.
+
+---
+
+## Components
+
+### 1. Client
+
+The client initiates communication.
+
+Examples:
+
+- Web browser
+- Mobile app
+- Desktop application
+
+Responsibilities:
+
+- User interface
+- Input validation (basic)
+- Sending requests
+- Displaying responses
+
+Example:
+
+```text
+Browser → GET /profile/123
+```
+
+---
+
+### 2. Server
+
+The server provides services and resources.
+
+Responsibilities:
+
+- Execute business logic
+- Authenticate users
+- Access databases
+- Generate responses
+
+Example:
+
+```text
+GET /profile/123
+      |
+      v
+ Fetch user data
+      |
+      v
+ Return JSON response
+```
+
+---
+
+## Request-Response Flow
+
+Consider a user opening Instagram:
+
+```text
+User
+  |
+Mobile App (Client)
+  |
+HTTPS Request
+  |
+Instagram Server
+  |
+Database
+  |
+Response
+  |
+Display Feed
+```
+
+Step-by-step:
+
+1. User opens app.
+2. Client sends request.
+3. Server validates request.
+4. Server queries database.
+5. Server generates response.
+6. Client displays data.
+
+---
+
+## Types of Client-Server Architectures
+
+### 1. Two-Tier Architecture
+
+Direct communication between client and server.
+
+```text
+Client
+   |
+Server + Database
+```
+
+Example:
+
+- Small desktop applications
+- Internal business tools
+
+Pros:
+
+- Simple
+- Easy to build
+
+Cons:
+
+- Poor scalability
+- Tight coupling
+
+---
+
+### 2. Three-Tier Architecture
+
+Most common web architecture.
+
+```text
+Client
+   |
+Application Server
+   |
+Database
+```
+
+Example:
+
+- E-commerce websites
+- Social media platforms
+
+Benefits:
+
+- Better scalability
+- Easier maintenance
+- Improved security
+
+---
+
+### 3. N-Tier Architecture
+
+Large-scale modern systems.
+
+```text
+Client
+   |
+Load Balancer
+   |
+API Layer
+   |
+Microservices
+   |
+Databases / Caches / Queues
+```
+
+Used by:
+
+- Netflix
+- Amazon
+- Uber
+- Facebook
+
+---
+
+## Characteristics
+
+### Centralized Management
+
+Servers control:
+
+- Data
+- Authentication
+- Business logic
+
+Benefits:
+
+- Easier updates
+- Better security
+
+---
+
+### Resource Sharing
+
+Many clients can use the same server.
+
+```text
+Client A
+Client B
+Client C
+    |
+  Server
+```
+
+Example:
+Thousands of users accessing the same website.
+
+---
+
+### Request-Response Communication
+
+Most systems follow:
+
+```text
+Request → Processing → Response
+```
+
+Protocols:
+
+- HTTP/HTTPS
+- gRPC
+- WebSocket
+- TCP
+
+---
+
+## Scalability Challenges
+
+A single server eventually becomes a bottleneck.
+
+### Initial Design
+
+```text
+Clients
+   |
+ Server
+```
+
+Problems:
+
+- CPU exhaustion
+- Memory exhaustion
+- Single point of failure
+
+---
+
+### Scaled Design
+
+```text
+Clients
+   |
+Load Balancer
+   |
++----+----+----+
+|    |    |    |
+S1   S2   S3  S4
+```
+
+Benefits:
+
+- Higher throughput
+- Better availability
+- Fault tolerance
+
+This evolution is common in system design interviews.
+
+---
+
+## Advantages
+
+| Advantage           | Explanation                       |
+| ------------------- | --------------------------------- |
+| Centralized control | Easier management                 |
+| Security            | Data stays on server              |
+| Resource sharing    | Many clients use same service     |
+| Easier maintenance  | Server updates affect all clients |
+| Scalability         | Servers can be replicated         |
+
+---
+
+## Disadvantages
+
+| Disadvantage               | Explanation                             |
+| -------------------------- | --------------------------------------- |
+| Server bottleneck          | Heavy traffic can overload server       |
+| Single point of failure    | One server failure can impact all users |
+| Network dependency         | Requires connectivity                   |
+| Higher infrastructure cost | Multiple servers needed at scale        |
+
+---
+
+## Real-World Examples
+
+| System   | Client         | Server              |
+| -------- | -------------- | ------------------- |
+| Gmail    | Browser/App    | Google Mail Servers |
+| Netflix  | Mobile/Web App | Netflix Backend     |
+| Amazon   | Browser/App    | Amazon Services     |
+| WhatsApp | Mobile App     | WhatsApp Servers    |
+
+---
+
+## Client-Server vs Peer-to-Peer (P2P)
+
+| Feature      | Client-Server         | Peer-to-Peer          |
+| ------------ | --------------------- | --------------------- |
+| Control      | Centralized           | Decentralized         |
+| Data Storage | Server                | Multiple peers        |
+| Management   | Easier                | More complex          |
+| Scalability  | Good with replication | Naturally distributed |
+| Example      | Web applications      | BitTorrent            |
+
+### Client-Server
+
+```text
+Clients
+   |
+ Server
+```
+
+### P2P
+
+```text
+Node A <--> Node B
+   ^           |
+   |           v
+Node D <--> Node C
+```
+
+---
+
+## Interview-Ready Summary
+
+Client-server architecture is a model where clients request services and servers process those requests and return responses. Clients handle presentation and user interaction, while servers manage business logic and data storage. Modern large-scale systems extend this model with load balancers, multiple application servers, caches, databases, and queues to achieve scalability, availability, and fault tolerance.
+
 ## Question 4. Explain microservices architecture vs monolithic architecture
 
 ## Question 5. What is service discovery and how does it work?

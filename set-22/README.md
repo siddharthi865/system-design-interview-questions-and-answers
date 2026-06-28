@@ -903,6 +903,331 @@ Log the idempotency key, request ID, and payment ID together to simplify debuggi
 
 ## Question 3. What is the difference between at-most-once, at-least-once, and exactly-once delivery?
 
+# Direct answer
+
+These terms describe **message delivery guarantees** in distributed systems.
+
+| Delivery Guarantee | Message Lost?                    | Duplicate Delivery? | Typical Use Cases                                            |
+| ------------------ | -------------------------------- | ------------------- | ------------------------------------------------------------ |
+| **At-most-once**   | Yes                              | No                  | Logging, metrics, non-critical notifications                 |
+| **At-least-once**  | No (unless catastrophic failure) | Yes                 | Payment events, order processing, email jobs                 |
+| **Exactly-once**   | No                               | No                  | Financial transactions, stream processing, inventory updates |
+
+The key trade-off is between **reliability, complexity, and performance**. As guarantees become stronger, implementation becomes more complex and expensive.
+
+---
+
+# Understanding the Guarantees
+
+## 1. At-most-once Delivery
+
+A message is delivered **zero or one time**.
+
+- It may be lost.
+- It is never delivered twice.
+
+### Flow
+
+```text
+Producer
+
+↓
+
+Broker
+
+↓
+
+Consumer
+```
+
+If the consumer crashes before processing or acknowledging:
+
+```text
+Producer
+
+↓
+
+Broker
+
+↓
+
+Consumer crashes
+
+↓
+
+Message Lost
+```
+
+The broker does **not** retry.
+
+### Advantages
+
+- Lowest latency
+- Simplest implementation
+- No duplicate handling
+
+### Disadvantages
+
+- Possible message loss
+- Unsuitable for critical data
+
+### Examples
+
+- Debug logs
+- Analytics events
+- Monitoring metrics
+- Presence updates
+
+---
+
+## 2. At-least-once Delivery
+
+A message is delivered **one or more times**.
+
+- No intentional message loss.
+- Duplicates are possible.
+
+### Flow
+
+```text
+Producer
+
+↓
+
+Broker
+
+↓
+
+Consumer
+
+↓
+
+ACK
+```
+
+Suppose:
+
+```text
+Consumer processes message
+
+↓
+
+ACK is lost
+
+↓
+
+Broker retries
+
+↓
+
+Consumer processes again
+```
+
+The message is processed twice.
+
+### Advantages
+
+- High reliability
+- No message loss under normal conditions
+
+### Disadvantages
+
+- Duplicate processing
+- Consumers must be idempotent
+
+### Examples
+
+- Payment events
+- Order creation
+- Inventory updates
+- Email processing
+
+---
+
+## 3. Exactly-once Delivery
+
+A message is processed **exactly one time**.
+
+- No loss
+- No duplicates
+
+This is the strongest guarantee.
+
+### Ideal Flow
+
+```text
+Producer
+
+↓
+
+Broker
+
+↓
+
+Consumer
+
+↓
+
+Processed Once
+
+↓
+
+ACK
+```
+
+Even if retries occur internally, the **effect** of processing happens only once.
+
+---
+
+# Why Exactly-Once Is Difficult
+
+Consider:
+
+```text
+Consumer processes payment
+
+↓
+
+Payment succeeds
+
+↓
+
+ACK lost
+
+↓
+
+Broker retries
+```
+
+Without safeguards:
+
+```text
+Customer Charged Twice
+```
+
+The broker cannot determine whether:
+
+- Processing failed, or
+- Only the acknowledgment was lost.
+
+This uncertainty is a classic distributed systems challenge.
+
+---
+
+# How Systems Achieve Exactly-Once Semantics
+
+True network-level exactly-once delivery is generally **not achievable** in distributed systems due to failures and partitions.
+
+Instead, systems aim for **exactly-once processing semantics** using techniques such as:
+
+### Idempotency
+
+```
+Payment ID = P123
+
+Retry
+
+↓
+
+Already Processed
+
+↓
+
+Return Previous Result
+```
+
+---
+
+### Deduplication
+
+Maintain processed message IDs.
+
+```
+Processed IDs
+
+A101
+A102
+A103
+```
+
+Ignore repeated IDs.
+
+---
+
+### Transactions
+
+Atomically:
+
+- Consume message
+- Update database
+- Commit offset
+
+Either all steps succeed or none do.
+
+---
+
+### Atomic Offset Commit
+
+```
+Read Message
+
+↓
+
+Update DB
+
+↓
+
+Commit Offset
+
+↓
+
+Done
+```
+
+This prevents reprocessing after successful commits.
+
+---
+
+# Comparison
+
+| Property                  | At-most-once | At-least-once       | Exactly-once                             |
+| ------------------------- | ------------ | ------------------- | ---------------------------------------- |
+| Message loss              | Possible     | Rare                | No                                       |
+| Duplicate delivery        | No           | Yes                 | No                                       |
+| Retry                     | No           | Yes                 | Internal retries hidden from application |
+| Consumer complexity       | Low          | Medium (idempotent) | High                                     |
+| Performance               | Highest      | High                | Lowest                                   |
+| Implementation complexity | Low          | Medium              | High                                     |
+
+---
+
+# Real-World Examples
+
+| System                                                  | Delivery Guarantee                         |
+| ------------------------------------------------------- | ------------------------------------------ |
+| UDP                                                     | At-most-once                               |
+| HTTP without retries                                    | At-most-once                               |
+| RabbitMQ (manual ACK)                                   | At-least-once                              |
+| Apache Kafka (default consumer behavior)                | At-least-once                              |
+| Apache Kafka with idempotent producers and transactions | Exactly-once processing semantics          |
+| Payment APIs using idempotency keys                     | Exactly-once effect for payment operations |
+
+---
+
+# Trade-offs
+
+| Guarantee         | Pros                                     | Cons                                                          |
+| ----------------- | ---------------------------------------- | ------------------------------------------------------------- |
+| **At-most-once**  | Fastest, simplest                        | Risk of data loss                                             |
+| **At-least-once** | Reliable delivery                        | Requires idempotent consumers to handle duplicates            |
+| **Exactly-once**  | Prevents both loss and duplicate effects | Highest complexity, additional coordination, lower throughput |
+
+---
+
+# Interview-ready summary
+
+> "At-most-once delivery means a message is delivered zero or one time, so messages can be lost but never duplicated. At-least-once delivery guarantees messages are eventually delivered, but duplicates can occur, so consumers must be idempotent. Exactly-once aims to ensure each message's effect occurs only once, typically through idempotency, deduplication, and transactional processing rather than relying on the network alone. In practice, most distributed systems use at-least-once delivery with idempotent consumers because it offers a good balance between reliability and complexity."
+
 ## Question 4. How do you design a real-time typing indicator system for a chat app?
 
 ## Question 5. What is a vector clock and how is it used in conflict resolution?

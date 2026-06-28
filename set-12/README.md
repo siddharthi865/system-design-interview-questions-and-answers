@@ -963,6 +963,484 @@ Protect against abuse with:
 
 ## Question 3. How do you design a plagiarism checker?
 
+# How do you design a plagiarism checker?
+
+## Direct answer
+
+A plagiarism checker compares a submitted document against a large corpus of documents to detect copied or highly similar content. Since comparing every document character-by-character is computationally expensive, modern systems use a multi-stage pipeline:
+
+1. **Preprocess** the document (normalize and tokenize).
+2. **Generate fingerprints** using techniques like **shingling** and **MinHash/SimHash**.
+3. **Retrieve candidate documents** using an inverted index or Locality Sensitive Hashing (LSH).
+4. **Perform detailed similarity comparison** only on the candidates.
+5. **Generate a plagiarism report** with matching passages and similarity scores.
+
+This approach scales to millions of documents while maintaining low latency.
+
+---
+
+# Requirements / Problem Framing
+
+### Functional Requirements
+
+- Upload documents (PDF, DOCX, TXT, etc.)
+- Detect exact and near-duplicate plagiarism
+- Highlight copied passages
+- Compute an overall similarity score
+- Compare against a large document repository
+- Support adding new documents continuously
+
+### Non-functional Requirements
+
+- High accuracy
+- Scalable to millions of documents
+- Fast response (seconds rather than minutes)
+- High availability
+- Efficient storage and indexing
+
+---
+
+# High-Level Architecture
+
+```text
+                 User Uploads Document
+                          │
+                          ▼
+                 Document Processing
+                          │
+          ┌───────────────┴───────────────┐
+          ▼                               ▼
+    Text Extraction                 Metadata Extraction
+          │
+          ▼
+   Normalization & Tokenization
+          │
+          ▼
+      Shingle Generation
+          │
+          ▼
+ Fingerprint (MinHash/SimHash)
+          │
+          ▼
+ Candidate Retrieval (LSH / Inverted Index)
+          │
+          ▼
+ Detailed Similarity Engine
+          │
+          ▼
+      Report Generator
+          │
+          ▼
+      Similarity Report
+```
+
+---
+
+# Step 1: Text Extraction
+
+Extract plain text from different formats.
+
+Supported formats:
+
+- PDF
+- DOCX
+- HTML
+- TXT
+- Markdown
+
+Example:
+
+```text
+Input PDF
+
+↓
+
+Extracted Text
+```
+
+---
+
+# Step 2: Normalization
+
+Normalize the text before comparison.
+
+Example:
+
+```text
+"The Quick Brown Fox!"
+
+↓
+
+the quick brown fox
+```
+
+Typical normalization includes:
+
+- Lowercasing
+- Removing punctuation
+- Removing extra whitespace
+- Unicode normalization
+- Optional stop-word removal
+- Optional stemming/lemmatization
+
+---
+
+# Step 3: Shingling
+
+Instead of comparing individual words, split the document into overlapping sequences of **k words** (k-shingles).
+
+Example (k = 3):
+
+```text
+Document:
+
+the quick brown fox jumps
+
+Shingles:
+
+the quick brown
+quick brown fox
+brown fox jumps
+```
+
+Benefits:
+
+- Detects copied phrases
+- Robust to small edits
+- Preserves local context
+
+---
+
+# Step 4: Fingerprinting
+
+Comparing all shingles from all documents is expensive.
+
+Instead, generate compact fingerprints.
+
+## MinHash
+
+Produces a compact signature that approximates the similarity between sets of shingles.
+
+Advantages:
+
+- Excellent for estimating **Jaccard Similarity**
+- Reduces storage requirements
+- Enables fast comparisons
+
+---
+
+## SimHash
+
+Represents a document as a binary fingerprint.
+
+Advantages:
+
+- Efficient near-duplicate detection
+- Small memory footprint
+- Hamming distance measures similarity
+
+---
+
+# Step 5: Candidate Retrieval
+
+Comparing against every stored document is infeasible.
+
+Instead:
+
+```text
+Document
+
+↓
+
+Fingerprint
+
+↓
+
+Locality Sensitive Hashing (LSH)
+
+↓
+
+Candidate Documents
+```
+
+LSH groups similar fingerprints into the same buckets, dramatically reducing the number of comparisons.
+
+Alternative approach:
+
+Use an **inverted index** mapping shingles to the documents containing them.
+
+---
+
+# Step 6: Detailed Similarity Comparison
+
+Once candidate documents are identified, perform more accurate comparisons.
+
+Common similarity metrics:
+
+### Jaccard Similarity
+
+```
+Similarity =
+Intersection(Set A, Set B)
+---------------------------
+Union(Set A, Set B)
+```
+
+Example:
+
+```
+Doc A shingles = 100
+
+Doc B shingles = 90
+
+Common = 80
+
+Similarity = 80 / 110 = 72.7%
+```
+
+---
+
+### Cosine Similarity
+
+Convert documents into TF-IDF vectors and compute the cosine of the angle between them.
+
+Useful for:
+
+- Semantic similarity
+- Documents with different lengths
+
+---
+
+### Edit Distance
+
+Useful for detecting:
+
+- Small modifications
+- Typographical changes
+
+Usually applied only to matching passages because it is computationally expensive.
+
+---
+
+# Highlight Matching Sections
+
+After detecting similar documents:
+
+```text
+Student Document
+
+↓
+
+Sentence Alignment
+
+↓
+
+Matching Passages
+
+↓
+
+Highlighted Report
+```
+
+Example:
+
+```text
+Original:
+Distributed systems improve scalability.
+
+Copied:
+Distributed systems improve scalability.
+```
+
+The report highlights the matching text and its source.
+
+---
+
+# Data Model
+
+### Documents
+
+| Field      | Description     |
+| ---------- | --------------- |
+| documentId | Unique ID       |
+| title      | Document title  |
+| text       | Normalized text |
+| language   | Language        |
+| uploadedAt | Timestamp       |
+
+### Fingerprints
+
+| Field      | Description     |
+| ---------- | --------------- |
+| documentId | Reference       |
+| signature  | MinHash/SimHash |
+| shingles   | Optional        |
+
+### Inverted Index
+
+```
+shingle
+
+↓
+
+documentIds
+```
+
+Example:
+
+```text
+"distributed systems"
+
+↓
+
+Doc12
+Doc45
+Doc102
+```
+
+---
+
+# Scaling Strategy
+
+## Distributed Storage
+
+```
+Document Store
+
+Shard 1
+Shard 2
+Shard 3
+```
+
+Shard by:
+
+- Document ID
+- Language
+- Hash of document
+
+---
+
+## Distributed Index
+
+Maintain distributed inverted indexes.
+
+```
+Shard A
+
+distributed
+
+↓
+
+Doc1
+Doc8
+
+Shard B
+
+database
+
+↓
+
+Doc9
+Doc20
+```
+
+Each node stores only part of the index.
+
+---
+
+## Parallel Similarity Computation
+
+```
+Candidate Documents
+
+↓
+
+Worker Pool
+
+↓
+
+Similarity Scores
+```
+
+Each worker compares a subset of candidate documents.
+
+---
+
+## Incremental Indexing
+
+When a new document arrives:
+
+```
+Upload
+
+↓
+
+Extract
+
+↓
+
+Fingerprint
+
+↓
+
+Update Index
+```
+
+Avoid rebuilding the entire index.
+
+---
+
+# Performance Optimizations
+
+- Cache frequently queried documents
+- Compress fingerprints
+- Store only fingerprints in memory
+- Batch index updates
+- Parallelize similarity computation
+- Precompute signatures offline
+
+---
+
+# Trade-offs
+
+| Approach              | Advantages                 | Disadvantages                              |
+| --------------------- | -------------------------- | ------------------------------------------ |
+| Exact text comparison | Very accurate              | Doesn't scale                              |
+| Shingling             | Detects copied phrases     | Larger index size                          |
+| MinHash               | Fast similarity estimation | Approximate                                |
+| SimHash               | Compact fingerprints       | Less precise for set similarity            |
+| Inverted Index        | Fast candidate lookup      | Higher storage overhead                    |
+| LSH                   | Excellent scalability      | May miss some edge cases (false negatives) |
+
+---
+
+# Security / Observability
+
+Security:
+
+- Virus scan uploaded files
+- Validate supported formats
+- Encrypt stored documents
+- Access control for private repositories
+
+Observability:
+
+Monitor:
+
+- Upload rate
+- Processing latency
+- Index update latency
+- Candidate retrieval time
+- Similarity computation latency
+- False positive/negative rates
+- Worker queue depth
+
+---
+
+# Interview-ready summary
+
+> "I would design a plagiarism checker as a multi-stage pipeline. Documents are first normalized and converted into overlapping word shingles. Compact fingerprints such as MinHash or SimHash are generated, and candidate documents are retrieved efficiently using an inverted index or Locality Sensitive Hashing instead of scanning the entire corpus. Only those candidates undergo detailed similarity checks using metrics like Jaccard or cosine similarity. Matching passages are then highlighted in a report. The system scales by sharding document storage and indexes, processing comparisons in parallel, and incrementally updating fingerprints as new documents are added."
+
 ## Question 4. How do you design a news feed ranking system?
 
 ## Question 5. How do you design a comment threading system?

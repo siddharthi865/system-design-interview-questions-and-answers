@@ -417,6 +417,220 @@ Possible solutions:
 
 ## Question 3. What is a Single Point of Failure (SPOF)?
 
+# Direct answer
+
+A **Single Point of Failure (SPOF)** is any component in a system whose failure causes the **entire system or a critical part of it to become unavailable** because there is no redundant or backup component.
+
+In distributed systems, identifying and eliminating SPOFs is essential for achieving **high availability** and **fault tolerance**.
+
+---
+
+# Intuition
+
+Imagine a bridge connecting an island to the mainland.
+
+- If there's **only one bridge**, and it collapses, no one can enter or leave the island.
+- That bridge is a **Single Point of Failure**.
+
+If there are **multiple bridges**, traffic can continue even if one fails.
+
+---
+
+# Example
+
+Consider this architecture:
+
+```text
+         Users
+           │
+           ▼
+     Load Balancer
+           │
+           ▼
+      Application Server
+           │
+           ▼
+        Database
+```
+
+Suppose there is:
+
+- One load balancer
+- One application server
+- One database
+
+If the database crashes:
+
+```text
+Database ❌
+```
+
+The entire application stops working.
+
+The database is a **Single Point of Failure**.
+
+---
+
+# Common SPOFs in distributed systems
+
+| Component                 | Why it's a SPOF                                    |
+| ------------------------- | -------------------------------------------------- |
+| Single database           | Data becomes unavailable if it fails               |
+| Single application server | No server to handle requests                       |
+| Single load balancer      | All incoming traffic is blocked                    |
+| Single cache server       | Cache becomes unavailable, increasing backend load |
+| Single message broker     | Producers and consumers cannot communicate         |
+| Single DNS server         | Clients cannot resolve the service                 |
+| Single network link       | Loss of connectivity                               |
+| Single data center        | Regional outage affects the entire system          |
+
+---
+
+# How to eliminate SPOFs
+
+The general strategy is to add **redundancy** so another component can take over if one fails.
+
+### 1. Multiple application servers
+
+Instead of:
+
+```text
+Users
+   │
+   ▼
+App Server
+```
+
+Use:
+
+```text
+           Users
+             │
+             ▼
+       Load Balancer
+        /         \
+       ▼           ▼
+   App Server 1  App Server 2
+```
+
+If one server fails, the other continues serving requests.
+
+---
+
+### 2. Database replication
+
+Instead of one database:
+
+```text
+App
+ │
+ ▼
+Database
+```
+
+Use:
+
+```text
+             Primary
+               │
+        ┌──────┴──────┐
+        ▼             ▼
+    Replica 1     Replica 2
+```
+
+If the primary fails, a replica can be promoted.
+
+---
+
+### 3. Multiple load balancers
+
+A load balancer itself can become a SPOF.
+
+Solution:
+
+```text
+           DNS
+         /     \
+        ▼       ▼
+      LB1     LB2
+        \     /
+         ▼   ▼
+      Application Servers
+```
+
+---
+
+### 4. Multi-region deployment
+
+Instead of one data center:
+
+```text
+Region A
+```
+
+Deploy:
+
+```text
+Region A
+
+Region B
+```
+
+If one region experiences an outage, traffic is routed to the other.
+
+---
+
+# Detecting SPOFs
+
+Ask these questions for every critical component:
+
+- What happens if this component fails?
+- Is there another instance that can immediately take over?
+- Can traffic be automatically redirected?
+- Is the failover automatic or manual?
+- Does data remain available during failure?
+
+If the answer is **"the system stops working"**, you've found a SPOF.
+
+---
+
+# SPOF vs Bottleneck
+
+| Aspect   | Single Point of Failure | Bottleneck              |
+| -------- | ----------------------- | ----------------------- |
+| Problem  | Availability            | Performance             |
+| Effect   | System outage           | Slow system             |
+| Cause    | No redundancy           | Limited capacity        |
+| Solution | Redundancy and failover | Optimization or scaling |
+
+A component can be **both** a bottleneck and a SPOF. For example, a single database handling all traffic may both limit throughput and cause a complete outage if it fails.
+
+---
+
+# Trade-offs
+
+| Approach                 | Advantages                        | Disadvantages                                           |
+| ------------------------ | --------------------------------- | ------------------------------------------------------- |
+| Redundant servers        | Higher availability               | Increased infrastructure cost                           |
+| Active-passive failover  | Simpler management                | Standby resources may be underutilized                  |
+| Active-active deployment | Better utilization and resilience | More complex synchronization and routing                |
+| Multi-region deployment  | Survives regional outages         | Higher cost, added latency, data consistency challenges |
+
+---
+
+# Real-world examples
+
+- **Web applications:** Multiple web servers behind a load balancer.
+- **Cloud databases:** Primary with one or more replicas and automatic failover.
+- **CDNs:** Content served from many geographically distributed edge locations.
+- **Kubernetes:** Multiple control-plane nodes prevent the control plane from becoming a SPOF.
+
+---
+
+# Interview-ready summary
+
+> **A Single Point of Failure (SPOF) is a component whose failure causes the entire system or a critical service to become unavailable because there is no backup or redundancy. Common SPOFs include a single database, application server, load balancer, or data center. To eliminate SPOFs, we introduce redundancy through replication, multiple instances, automatic failover, and multi-region deployments, ensuring the system continues operating even when individual components fail.**
+
 ## Question 4. What is the difference between synchronous and asynchronous communication?
 
 ## Question 5. What is the difference between online (OLTP) and analytical (OLAP) databases?

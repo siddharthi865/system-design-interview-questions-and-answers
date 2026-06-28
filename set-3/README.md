@@ -488,6 +488,282 @@ Interviewers often ask for a sequence diagram after the high-level architecture 
 
 ## Question 3. What is an ER diagram?
 
+## Direct Answer
+
+An **ER Diagram (Entity Relationship Diagram)** is a database modeling diagram used to represent:
+
+- **Entities** (objects or tables)
+- **Attributes** (properties/columns)
+- **Relationships** between entities
+
+It is primarily used during **database design** to model how data is stored and connected before creating actual database tables.
+
+---
+
+## Why ER Diagrams Are Used
+
+ER diagrams help answer questions like:
+
+- What data needs to be stored?
+- What entities exist in the system?
+- How are entities related?
+- What are the cardinality constraints (1:1, 1:N, M:N)?
+
+They serve as the blueprint for designing relational databases.
+
+---
+
+## Core Components
+
+### 1. Entity
+
+An entity represents a real-world object.
+
+Examples:
+
+- User
+- Customer
+- Product
+- Order
+
+```text
++-----------+
+| Customer  |
++-----------+
+```
+
+In a database, entities usually become tables.
+
+---
+
+### 2. Attributes
+
+Attributes describe an entity.
+
+Example:
+
+```text
+Customer
+---------
+customer_id
+name
+email
+phone
+```
+
+Here:
+
+- `customer_id` is an attribute
+- `name` is an attribute
+- `email` is an attribute
+
+In a database, attributes become columns.
+
+---
+
+### 3. Relationship
+
+Relationships show how entities are connected.
+
+Example:
+
+```text
+Customer ---- Places ---- Order
+```
+
+Meaning:
+
+> A customer places orders.
+
+---
+
+## Example ER Diagram
+
+### E-Commerce System
+
+```text
++------------+           +-----------+
+| Customer   |           |  Order    |
++------------+           +-----------+
+| customerId |-----------| orderId   |
+| name       |  places   | amount    |
+| email      |           | status    |
++------------+           +-----------+
+```
+
+Relationship:
+
+- One Customer can place many Orders.
+
+---
+
+## Cardinality (Most Important Concept)
+
+### 1. One-to-One (1:1)
+
+```text
+User -------- Passport
+```
+
+- One user has one passport.
+- One passport belongs to one user.
+
+---
+
+### 2. One-to-Many (1:N)
+
+```text
+Customer -------- Order
+      1            N
+```
+
+- One customer can have many orders.
+- Each order belongs to one customer.
+
+Most common relationship.
+
+---
+
+### 3. Many-to-Many (M:N)
+
+```text
+Student -------- Course
+      M            N
+```
+
+- A student can enroll in many courses.
+- A course can have many students.
+
+Implemented using a junction table:
+
+```text
+Student
+Course
+StudentCourse
+```
+
+---
+
+## Example: Social Media Database
+
+```text
+User
+----
+user_id
+name
+
+Post
+----
+post_id
+content
+user_id
+
+Comment
+-------
+comment_id
+text
+post_id
+user_id
+```
+
+Relationships:
+
+```text
+User 1 ------ N Post
+
+User 1 ------ N Comment
+
+Post 1 ------ N Comment
+```
+
+Meaning:
+
+- A user creates many posts.
+- A user writes many comments.
+- A post has many comments.
+
+---
+
+## ER Diagram vs Class Diagram
+
+| ER Diagram                             | Class Diagram                           |
+| -------------------------------------- | --------------------------------------- |
+| Used for database design               | Used for object-oriented design         |
+| Models entities and data relationships | Models classes and object relationships |
+| Focuses on data storage                | Focuses on application structure        |
+| Tables, columns, keys                  | Classes, attributes, methods            |
+| No behavior/methods                    | Includes methods                        |
+
+### Example
+
+ER Diagram:
+
+```text
+Customer
+---------
+customer_id
+name
+email
+```
+
+Class Diagram:
+
+```text
+Customer
+---------
+id
+name
+email
+---------
+createOrder()
+updateProfile()
+```
+
+Notice that class diagrams contain behavior (methods), while ER diagrams focus only on data.
+
+---
+
+## ER Diagram vs Sequence Diagram
+
+| ER Diagram                 | Sequence Diagram    |
+| -------------------------- | ------------------- |
+| Data model                 | Workflow model      |
+| Static                     | Dynamic             |
+| Entities and relationships | Message flow        |
+| Database design            | Runtime interaction |
+
+---
+
+## In System Design Interviews
+
+ER diagrams are useful when discussing:
+
+- Database schema design
+- Data modeling
+- Relational databases
+- Entity relationships
+- Normalization
+
+Typical interview flow:
+
+```text
+Requirements
+      ↓
+API Design
+      ↓
+ER Diagram / Data Model
+      ↓
+Database Design
+      ↓
+Scaling Strategy
+```
+
+---
+
+## Interview-Ready Summary
+
+> An ER Diagram (Entity Relationship Diagram) is a database modeling tool used to represent entities, their attributes, and the relationships between them. It serves as the foundation for designing relational database schemas and helps define how data is stored, connected, and queried. The most important concepts in ER modeling are entities, attributes, relationships, and cardinality (1:1, 1:N, and M:N).
+
 ## Question 4. Explain SOLID principles in system design
 
 ## Question 5. How do you design a parking lot system?

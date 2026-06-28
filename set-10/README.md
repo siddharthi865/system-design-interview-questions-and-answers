@@ -786,6 +786,309 @@ No sticky sessions are required, making scaling and failover simpler.
 
 ## Question 3. What is secret management in microservices?
 
+# Direct answer
+
+**Secret management** is the practice of securely storing, distributing, rotating, and controlling access to sensitive credentials (called _secrets_) used by microservices.
+
+Secrets include:
+
+- Database passwords
+- API keys
+- Encryption keys
+- OAuth client secrets
+- TLS certificates
+- Cloud credentials
+- Service account tokens
+
+The goal is to **ensure services can securely access the secrets they need without hardcoding or exposing them**.
+
+---
+
+# Why secret management is important
+
+In a microservices architecture, dozens or hundreds of services communicate with databases, message queues, cloud services, and third-party APIs.
+
+Each service may require multiple secrets.
+
+Without proper secret management, teams often:
+
+- Hardcode secrets in source code
+- Store credentials in configuration files
+- Commit secrets to Git
+- Share credentials manually
+- Reuse the same password across services
+
+These practices increase the risk of credential leaks and make rotation difficult.
+
+---
+
+# High-level architecture
+
+```text
+                +----------------------+
+                | Secret Management    |
+                |      System          |
+                | (Vault/KMS/Cloud)    |
+                +----------+-----------+
+                           ^
+                           |
+                 Authenticate & Request
+                           |
+        +------------------+------------------+
+        |                  |                  |
++-------+-------+  +-------+-------+  +-------+-------+
+| User Service  |  | Order Service |  | Payment Service|
++-------+-------+  +-------+-------+  +-------+-------+
+        |                  |                  |
+        +------------------+------------------+
+                           |
+                    Databases / APIs
+```
+
+Instead of embedding passwords, each service authenticates itself and retrieves secrets securely when needed.
+
+---
+
+# What qualifies as a secret?
+
+Common examples include:
+
+- Database usernames and passwords
+- API keys
+- JWT signing keys
+- TLS private keys
+- SSH keys
+- OAuth client secrets
+- Cloud IAM credentials
+- Encryption keys
+
+Generally, **any value that grants access or must remain confidential should be treated as a secret**.
+
+---
+
+# How secret management works
+
+### Step 1: Service authenticates
+
+When a service starts, it proves its identity using mechanisms such as:
+
+- Kubernetes Service Account
+- Cloud IAM role
+- Mutual TLS (mTLS)
+- Machine identity
+- Short-lived bootstrap token
+
+---
+
+### Step 2: Request a secret
+
+```text
+User Service
+      |
+      | Authenticate
+      |
+Secret Manager
+      |
+Return DB Password
+```
+
+The service requests only the secrets it is authorized to access.
+
+---
+
+### Step 3: Use the secret
+
+Example:
+
+```text
+Database Password
+
+↓
+
+Connect to Database
+
+↓
+
+Never expose password to users
+```
+
+The secret is used in memory and should not be logged or exposed.
+
+---
+
+# Where secrets are stored
+
+A centralized secret management system typically provides:
+
+- Encrypted storage
+- Access control
+- Audit logging
+- Secret versioning
+- Automatic rotation
+- High availability
+
+Popular solutions include:
+
+- HashiCorp Vault
+- AWS Secrets Manager
+- Azure Key Vault
+- Google Cloud Secret Manager
+
+---
+
+# Secret rotation
+
+Secrets should not remain valid indefinitely.
+
+Example:
+
+```text
+Old Password
+
+↓
+
+Generate New Password
+
+↓
+
+Update Database
+
+↓
+
+Notify Services
+
+↓
+
+Old Password Expires
+```
+
+Automatic rotation reduces the impact of compromised credentials.
+
+---
+
+# Dynamic secrets
+
+Instead of storing a permanent database password, the secret manager can generate **temporary credentials**.
+
+Example:
+
+```text
+Service
+
+↓
+
+Request DB Credentials
+
+↓
+
+Secret Manager
+
+↓
+
+Username: app_83921
+
+Password: x72A...
+
+TTL: 1 hour
+```
+
+After the TTL expires, the credentials become invalid automatically.
+
+**Benefits:**
+
+- Reduced exposure window
+- No shared long-lived passwords
+- Easier revocation
+
+---
+
+# Access control
+
+Apply the **principle of least privilege**.
+
+Example:
+
+| Service              | Allowed Secrets        |
+| -------------------- | ---------------------- |
+| User Service         | User DB password       |
+| Payment Service      | Payment API key        |
+| Notification Service | Email provider API key |
+
+Each service receives only the secrets it needs.
+
+---
+
+# Common mistakes
+
+### ❌ Hardcoding secrets
+
+```text
+const PASSWORD = "admin123";
+```
+
+If the code is leaked, the secret is exposed.
+
+---
+
+### ❌ Storing secrets in Git
+
+```text
+config.json
+
+password = abc123
+```
+
+Secrets committed to version control are difficult to remove completely.
+
+---
+
+### ❌ Logging secrets
+
+```text
+Connecting using password=abcd1234
+```
+
+Logs should never contain secrets.
+
+---
+
+### ❌ Sharing one credential across services
+
+If one service is compromised, all services using that credential are at risk.
+
+---
+
+# Best practices
+
+- Never hardcode secrets in source code.
+- Store secrets in a centralized secret manager.
+- Encrypt secrets at rest and in transit.
+- Use short-lived credentials whenever possible.
+- Rotate secrets automatically and regularly.
+- Authenticate services using strong machine identities.
+- Enforce least-privilege access policies.
+- Audit every secret access.
+- Avoid storing secrets in environment variables longer than necessary if more secure retrieval mechanisms are available.
+- Never expose secrets in logs, error messages, or monitoring systems.
+
+---
+
+# Trade-offs
+
+| Approach                   | Advantages                               | Disadvantages                                                         |
+| -------------------------- | ---------------------------------------- | --------------------------------------------------------------------- |
+| Hardcoded secrets          | Very simple                              | Highly insecure, difficult to rotate                                  |
+| Configuration files        | Easy to manage initially                 | Risk of accidental exposure                                           |
+| Environment variables      | Common in containerized deployments      | Can still be exposed through process inspection or misconfigured logs |
+| Centralized secret manager | Secure, auditable, supports rotation     | Additional infrastructure and operational complexity                  |
+| Dynamic secrets            | Strongest security, automatic expiration | More complex integration and lifecycle management                     |
+
+---
+
+# Interview-ready summary
+
+> **Secret management is the secure lifecycle management of sensitive credentials used by microservices. Instead of embedding passwords or API keys in code or configuration files, services authenticate to a centralized secret manager to retrieve only the secrets they are authorized to use. A robust solution supports encryption, fine-grained access control, auditing, automatic rotation, and dynamic short-lived credentials, significantly reducing the risk of credential leakage and simplifying operational security.**
+
 ## Question 4. How do you prevent SQL injection at scale?
 
 ## Question 5. What is a DDoS attack and how do you prevent it?

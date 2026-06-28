@@ -1026,6 +1026,554 @@ Protect backend
 
 ## Question 3. How would you design a financial transaction ledger system?
 
+# Direct answer
+
+A **financial transaction ledger** should be designed as an **immutable, append-only, double-entry accounting system** that guarantees every transaction is balanced, durable, auditable, and idempotent. The ledger should be the **source of truth** for all financial movements, while account balances are derived from ledger entries or maintained as projections for fast reads.
+
+---
+
+# Requirements / Problem framing
+
+## Functional Requirements
+
+- Record financial transactions
+- Support debit and credit entries
+- Ensure transactions are balanced
+- View account balances
+- View transaction history
+- Support reversals (not updates/deletes)
+- Handle concurrent transactions
+- Ensure idempotent transaction processing
+
+## Non-Functional Requirements
+
+- Strong consistency
+- High durability
+- High availability
+- ACID transactions
+- Complete audit trail
+- Scalability
+- Low latency for reads
+
+---
+
+# High-level Architecture
+
+```text
+                   Client
+                      |
+               API Gateway
+                      |
+              Ledger Service
+                      |
+      +---------------+----------------+
+      |                                |
+ Idempotency Store              Ledger Database
+      |                                |
+      +---------------+----------------+
+                      |
+             Event Bus (Optional)
+                      |
+        +-------------+-------------+
+        |                           |
+ Balance Projection          Notification
+        |
+ Read Database
+```
+
+### Components
+
+### 1. Ledger Service
+
+Responsible for:
+
+- Validating transactions
+- Enforcing accounting rules
+- Ensuring debit = credit
+- Executing database transactions
+- Publishing events
+
+---
+
+### 2. Ledger Database
+
+Stores immutable journal entries.
+
+Example:
+
+```text
+Transaction T1
+
+Debit:
+Cash Account        +100
+
+Credit:
+User Wallet         -100
+```
+
+No updates.
+
+No deletes.
+
+Only inserts.
+
+---
+
+### 3. Balance Projection
+
+Instead of calculating balances by replaying all entries:
+
+```text
+Balance Table
+
+Account A
+
+Current Balance = ₹5000
+```
+
+Maintain balances incrementally.
+
+If corrupted:
+
+```text
+Replay Ledger
+
+↓
+
+Rebuild Balance Table
+```
+
+---
+
+# Data Model
+
+## Account
+
+```text
+Account
+--------
+account_id
+account_type
+currency
+status
+created_at
+```
+
+---
+
+## Transaction
+
+```text
+Transaction
+-----------
+transaction_id
+reference_id
+status
+created_at
+```
+
+---
+
+## Ledger Entry
+
+```text
+LedgerEntry
+-----------
+entry_id
+transaction_id
+account_id
+type (Debit/Credit)
+amount
+currency
+timestamp
+```
+
+Example:
+
+| Txn | Account | Type   | Amount |
+| --- | ------- | ------ | ------ |
+| T1  | Cash    | Debit  | 100    |
+| T1  | Wallet  | Credit | 100    |
+
+---
+
+# Double-Entry Accounting
+
+Every transaction must satisfy:
+
+```text
+Total Debit = Total Credit
+```
+
+Example
+
+Transfer ₹100
+
+```text
+Debit:
+User A     100
+
+Credit:
+User B     100
+```
+
+Ledger remains balanced.
+
+This prevents money creation or loss.
+
+---
+
+# Transaction Flow
+
+```text
+Transfer ₹500
+
+↓
+
+Validate accounts
+
+↓
+
+Check balance
+
+↓
+
+Begin DB Transaction
+
+↓
+
+Insert Ledger Entries
+
+↓
+
+Update Balance Projection
+
+↓
+
+Commit
+
+↓
+
+Publish Event
+```
+
+Everything succeeds or everything rolls back.
+
+---
+
+# Ensuring ACID Properties
+
+Use a relational database such as:
+
+- PostgreSQL
+- MySQL
+- Oracle
+
+Within one database transaction:
+
+```text
+BEGIN
+
+Insert transaction
+
+Insert debit entry
+
+Insert credit entry
+
+Update balances
+
+COMMIT
+```
+
+Atomicity ensures no partial transactions.
+
+---
+
+# Concurrency Control
+
+Problem:
+
+```text
+Balance = 100
+
+Txn A withdraws 80
+
+Txn B withdraws 50
+```
+
+Without coordination:
+
+```text
+Both succeed
+
+Balance = -30
+```
+
+Incorrect.
+
+---
+
+## Option 1: Row-Level Locking
+
+```sql
+SELECT balance
+FROM account
+WHERE id=1
+FOR UPDATE;
+```
+
+Only one transaction updates the account at a time.
+
+---
+
+## Option 2: Optimistic Locking
+
+```text
+Balance
+
+Version = 10
+```
+
+Update only if:
+
+```sql
+WHERE version=10
+```
+
+If another transaction modified the row, retry.
+
+Good for lower contention.
+
+---
+
+# Idempotency
+
+Payment providers retry requests.
+
+Without idempotency:
+
+```text
+Transfer ₹100
+
+↓
+
+Retry
+
+↓
+
+Transferred twice
+```
+
+Use:
+
+```text
+Idempotency-Key
+```
+
+Flow:
+
+```text
+Receive request
+
+↓
+
+Lookup key
+
+↓
+
+Already processed?
+
+↓
+
+Return previous response
+```
+
+Prevents duplicate financial transactions.
+
+---
+
+# Handling Failures
+
+Suppose crash occurs after ledger write.
+
+Use the **Transactional Outbox Pattern**.
+
+```text
+Database Transaction
+
+Insert Ledger
+
+Insert Outbox Event
+
+Commit
+```
+
+Background worker:
+
+```text
+Read Outbox
+
+↓
+
+Publish Event
+
+↓
+
+Mark Sent
+```
+
+Avoids inconsistencies between the database and message broker.
+
+---
+
+# Reversals Instead of Updates
+
+Never modify ledger entries.
+
+Wrong approach:
+
+```text
+Update amount
+
+Delete entry
+```
+
+Correct approach:
+
+```text
+Txn 1
+
+Debit A 100
+
+Credit B 100
+
+↓
+
+Txn 2 (Reversal)
+
+Debit B 100
+
+Credit A 100
+```
+
+History remains intact.
+
+---
+
+# Scalability
+
+### Read Scaling
+
+Use replicas.
+
+```text
+Ledger DB
+
+↓
+
+Read Replicas
+
+↓
+
+Balance Queries
+```
+
+---
+
+### Write Scaling
+
+Shard by:
+
+```text
+Account ID
+```
+
+or
+
+```text
+Organization ID
+```
+
+Cross-shard transactions may require careful orchestration, so many financial systems keep related accounts on the same shard where possible.
+
+---
+
+### Event Streaming
+
+Publish events.
+
+```text
+Ledger
+
+↓
+
+Kafka
+
+↓
+
+Fraud Detection
+
+Analytics
+
+Audit
+
+Notifications
+```
+
+Consumers remain loosely coupled.
+
+---
+
+# Security / Observability
+
+### Security
+
+- Authentication and authorization
+- Encryption in transit (TLS)
+- Encryption at rest
+- Fine-grained access control
+- Immutable audit logs
+- Digital signatures or checksums for tamper detection (where required)
+- PCI DSS compliance if handling payment card data
+
+### Observability
+
+Monitor:
+
+- Transaction latency
+- Failed transactions
+- Duplicate idempotency keys
+- Ledger imbalance (should always be zero)
+- Replication lag
+- Database lock contention
+
+Critical alert:
+
+```text
+SUM(Debits) != SUM(Credits)
+```
+
+This should never happen.
+
+---
+
+# Trade-offs
+
+| Decision                        | Advantages                             | Disadvantages                           |
+| ------------------------------- | -------------------------------------- | --------------------------------------- |
+| Double-entry ledger             | Financial correctness and auditability | More complex data model                 |
+| Immutable append-only log       | Full history, easy auditing            | Storage grows continuously              |
+| Precomputed balance projections | Fast balance queries                   | Must keep projections synchronized      |
+| Pessimistic locking             | Prevents overspending under contention | Lower throughput due to blocking        |
+| Optimistic locking              | Higher throughput with low contention  | Retries increase under heavy contention |
+| Event-driven architecture       | Decouples downstream services          | Eventual consistency for consumers      |
+
+---
+
+# Interview-ready summary
+
+> **A financial ledger should be built as an immutable, append-only, double-entry accounting system. Every transaction generates balanced debit and credit entries stored within a single ACID database transaction. The ledger is the source of truth, while balances are maintained as read-optimized projections that can be rebuilt from the ledger. To ensure correctness, use idempotency keys, concurrency control through row-level or optimistic locking, and transactional outbox for reliable event publishing. Never update or delete ledger entries—instead, create compensating reversal transactions. This design provides strong consistency, auditability, durability, and scalability suitable for financial systems.**
+
 ## Question 4. What are the trade-offs of push vs. pull models in notifications?
 
 ## Question 5. How would you design a rate limiter (like token bucket or leaky bucket)?

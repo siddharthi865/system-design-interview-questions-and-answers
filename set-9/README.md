@@ -650,6 +650,281 @@ The client receives a faster response, but some replicas may temporarily lag beh
 
 ## Question 3. What is active-active vs active-passive setup?
 
+# Active-Active vs Active-Passive Setup
+
+## Direct answer
+
+**Active-Active** and **Active-Passive** are two high-availability deployment strategies.
+
+- **Active-Active:** Multiple servers or instances actively serve traffic at the same time. If one fails, the remaining instances continue handling requests.
+- **Active-Passive:** One server actively handles all traffic, while another remains on standby. If the active server fails, the passive server takes over.
+
+The choice is a trade-off between **availability, resource utilization, complexity, and cost**.
+
+---
+
+## Active-Active Setup
+
+In an active-active architecture, **all instances are live and serving requests simultaneously**.
+
+### Architecture
+
+```text
+               Load Balancer
+              /      |      \
+             /       |       \
+      Server A   Server B   Server C
+       Active     Active     Active
+```
+
+Traffic is distributed across all healthy instances.
+
+### Failure scenario
+
+```text
+Before failure:
+
+LB → A, B, C
+
+After Server B fails:
+
+LB → A, C
+```
+
+Users continue to be served with little or no interruption.
+
+### Advantages
+
+- High availability
+- Better resource utilization
+- Higher throughput
+- Easy horizontal scaling
+- No idle infrastructure
+
+### Disadvantages
+
+- More complex synchronization
+- Data consistency challenges
+- Load balancing required
+- Conflict resolution may be needed for distributed writes
+
+---
+
+## Active-Passive Setup
+
+In an active-passive architecture, only one instance serves requests.
+
+The passive instance waits for failover.
+
+### Architecture
+
+```text
+             Load Balancer
+                   |
+             Active Server
+                   |
+            State Replication
+                   |
+            Passive Server
+```
+
+The passive server continuously receives state updates but does not process client traffic.
+
+### Failure scenario
+
+```text
+Before:
+
+Active → Serving traffic
+Passive → Standby
+
+After failure:
+
+Passive → Promoted to Active
+```
+
+Traffic resumes once failover is complete.
+
+### Advantages
+
+- Simpler architecture
+- Easier data consistency
+- Easier operational management
+- Predictable behavior
+
+### Disadvantages
+
+- Standby resources are idle
+- Lower overall throughput
+- Brief downtime during failover
+- Less efficient infrastructure utilization
+
+---
+
+## Comparison
+
+| Feature              | Active-Active                        | Active-Passive                      |
+| -------------------- | ------------------------------------ | ----------------------------------- |
+| Traffic handling     | All nodes serve traffic              | One node serves traffic             |
+| Failover             | Immediate (remaining nodes continue) | Passive node promoted after failure |
+| Resource utilization | High                                 | Lower (standby is mostly idle)      |
+| Scalability          | Excellent                            | Limited                             |
+| Complexity           | Higher                               | Lower                               |
+| Data synchronization | More challenging                     | Simpler                             |
+| Cost efficiency      | Better                               | Less efficient                      |
+
+---
+
+## Where each is commonly used
+
+### Active-Active
+
+Suitable for:
+
+- Web servers
+- API gateways
+- Content delivery systems
+- Global SaaS applications
+- Microservices
+
+Example:
+
+```text
+Users
+   |
+Load Balancer
+   |
+------------------------
+|         |            |
+App1     App2        App3
+```
+
+Adding another instance immediately increases capacity.
+
+---
+
+### Active-Passive
+
+Suitable for:
+
+- Primary/standby databases
+- Disaster recovery systems
+- Legacy enterprise applications
+- Stateful applications where only one node should process requests
+
+Example:
+
+```text
+Primary Database
+        |
+Synchronous Replication
+        |
+Standby Database
+```
+
+If the primary fails, the standby is promoted.
+
+---
+
+## Database example
+
+### Active-Passive
+
+```text
+Primary
+   |
+Write
+   |
+Standby
+```
+
+- Writes go only to the primary.
+- Reads may optionally go to replicas, depending on the design.
+
+---
+
+### Active-Active
+
+```text
+DB A <------> DB B
+   ^            ^
+   |            |
+Clients      Clients
+```
+
+Both databases accept writes.
+
+Challenges include:
+
+- Write conflicts
+- Replication lag
+- Conflict resolution
+- Split-brain prevention
+
+---
+
+## Multi-region deployment
+
+### Active-Active
+
+```text
+          Users
+             |
+    -----------------
+    |               |
+Region A        Region B
+ Active          Active
+```
+
+Users are routed to the nearest healthy region, improving latency and resilience.
+
+### Active-Passive
+
+```text
+Primary Region
+      |
+Replication
+      |
+Backup Region
+```
+
+The backup region is activated only if the primary region becomes unavailable.
+
+---
+
+## Trade-offs
+
+| Active-Active                            | Active-Passive                     |
+| ---------------------------------------- | ---------------------------------- |
+| Maximizes availability and throughput    | Simpler operations and consistency |
+| Efficient hardware utilization           | Idle standby resources             |
+| Handles failures with minimal disruption | Short failover delay               |
+| Requires sophisticated synchronization   | Easier to implement and maintain   |
+
+---
+
+## When to choose which?
+
+Choose **Active-Active** when:
+
+- High traffic must be handled continuously.
+- Near-zero downtime is required.
+- You need horizontal scalability.
+- The application is stateless or can safely manage distributed state.
+
+Choose **Active-Passive** when:
+
+- Simplicity and operational stability are priorities.
+- The application is stateful.
+- Only one node should process writes at a time.
+- Brief failover delays are acceptable.
+
+---
+
+## Interview-ready summary
+
+> "Active-Active means multiple instances serve traffic simultaneously, providing high availability, better resource utilization, and easy horizontal scaling. It is ideal for stateless services and global applications but requires careful handling of synchronization and consistency. Active-Passive uses one active instance with a standby replica that takes over during failures. It is simpler to operate and well-suited for stateful systems like primary-standby databases, though it leaves standby resources mostly idle and introduces a small failover delay."
+
 ## Question 4. How do you design a failover mechanism?
 
 ## Question 5. What is split-brain problem in distributed systems?

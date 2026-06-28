@@ -916,6 +916,339 @@ Alerts:
 
 ## Question 3. What is load balancing at Layer 4 vs Layer 7?
 
+# Direct answer
+
+**Layer 4 (L4) load balancing** routes traffic based on **transport-layer information** such as IP addresses, TCP/UDP ports, and protocols. It does **not inspect the application data**.
+
+**Layer 7 (L7) load balancing** operates at the **application layer**, inspecting HTTP/HTTPS requests and routing traffic based on URL paths, headers, cookies, hostnames, or other application-specific data.
+
+In interviews, a common summary is:
+
+- **L4 = Fast, protocol-agnostic, connection-based routing**
+- **L7 = Intelligent, content-aware, request-based routing**
+
+---
+
+# OSI Layer comparison
+
+| Layer 4               | Layer 7                               |
+| --------------------- | ------------------------------------- |
+| Transport Layer       | Application Layer                     |
+| TCP/UDP               | HTTP, HTTPS, gRPC, WebSocket          |
+| Routes by IP and Port | Routes by URL, Host, Headers, Cookies |
+
+---
+
+# How Layer 4 load balancing works
+
+An L4 load balancer only looks at network information.
+
+Example:
+
+```text
+Client
+   │
+TCP Connection
+   │
+   ▼
+L4 Load Balancer
+   │
+   ├── Server A
+   ├── Server B
+   └── Server C
+```
+
+It makes routing decisions using:
+
+- Source IP
+- Destination IP
+- Source port
+- Destination port
+- Protocol (TCP/UDP)
+
+It **does not know** whether the request is:
+
+```text
+GET /login
+```
+
+or
+
+```text
+GET /checkout
+```
+
+because it doesn't inspect the HTTP payload.
+
+---
+
+# Example
+
+Suppose three web servers exist.
+
+```text
+10.0.0.1
+10.0.0.2
+10.0.0.3
+```
+
+The L4 balancer simply distributes TCP connections.
+
+Example algorithms:
+
+- Round Robin
+- Least Connections
+- Hash(Source IP)
+
+---
+
+# Advantages of Layer 4
+
+- Extremely fast
+- Low latency
+- Handles millions of connections
+- Supports TCP and UDP
+- Low CPU overhead
+- Suitable for non-HTTP protocols
+
+---
+
+# Limitations of Layer 4
+
+Cannot route based on:
+
+- URL path
+- HTTP method
+- Headers
+- Cookies
+- Authentication
+- API version
+
+---
+
+# How Layer 7 load balancing works
+
+An L7 load balancer terminates the client connection, reads the application request, and makes routing decisions based on its contents.
+
+```text
+Client
+    │
+HTTP Request
+    │
+    ▼
+L7 Load Balancer
+    │
+    ├── /images  → Image Service
+    ├── /orders  → Order Service
+    └── /users   → User Service
+```
+
+Unlike L4, it understands HTTP.
+
+---
+
+# Example routing
+
+Incoming request:
+
+```text
+GET /images/logo.png
+```
+
+Route to:
+
+```text
+Image Service
+```
+
+Another request:
+
+```text
+POST /payments
+```
+
+Route to:
+
+```text
+Payment Service
+```
+
+Same domain, different backend services.
+
+---
+
+# Common Layer 7 routing rules
+
+### URL Path
+
+```text
+/api/*
+      ↓
+API Servers
+
+/images/*
+      ↓
+Image Servers
+```
+
+---
+
+### Hostname
+
+```text
+api.company.com
+        ↓
+API Cluster
+
+admin.company.com
+        ↓
+Admin Cluster
+```
+
+---
+
+### HTTP Header
+
+```text
+Version=v2
+
+↓
+
+New Cluster
+```
+
+Useful for API versioning.
+
+---
+
+### Cookie
+
+```text
+Premium=true
+
+↓
+
+Premium Servers
+```
+
+Useful for personalized routing or sticky sessions.
+
+---
+
+# SSL/TLS termination
+
+L7 load balancers commonly terminate HTTPS.
+
+```text
+Client
+   │
+HTTPS
+   │
+   ▼
+Load Balancer
+   │
+HTTP
+   │
+Backend Servers
+```
+
+Benefits:
+
+- Offloads encryption/decryption from application servers.
+- Centralizes certificate management.
+
+---
+
+# Advantages of Layer 7
+
+- Intelligent routing
+- URL-based routing
+- Host-based routing
+- Header-based routing
+- Cookie-based routing
+- SSL/TLS termination
+- Request rewriting
+- Authentication integration
+- Compression and caching support
+- Better observability with HTTP metrics
+
+---
+
+# Limitations of Layer 7
+
+- Higher CPU usage
+- More latency than L4
+- HTTP-aware (not suitable for every protocol)
+- More complex configuration
+
+---
+
+# Layer 4 vs Layer 7
+
+| Feature                | Layer 4                                  | Layer 7                                  |
+| ---------------------- | ---------------------------------------- | ---------------------------------------- |
+| OSI Layer              | Transport                                | Application                              |
+| Protocols              | TCP, UDP                                 | HTTP, HTTPS, gRPC, WebSocket             |
+| Routing based on       | IP, Port, Protocol                       | URL, Host, Headers, Cookies, HTTP Method |
+| Reads application data | No                                       | Yes                                      |
+| SSL termination        | Rare                                     | Common                                   |
+| Performance            | Very high                                | Lower than L4 due to request inspection  |
+| Flexibility            | Limited                                  | Very high                                |
+| Typical use cases      | Databases, gaming, DNS, raw TCP services | Web apps, REST APIs, microservices       |
+
+---
+
+# When to use each
+
+### Use Layer 4 when
+
+- Maximum throughput is required.
+- The traffic is not HTTP-based.
+- You are balancing databases, caches, or other TCP/UDP services.
+- Simplicity and low latency are priorities.
+
+Examples:
+
+- Database clusters
+- DNS servers
+- Game servers
+- MQTT brokers
+
+---
+
+### Use Layer 7 when
+
+- Building web applications or APIs.
+- Routing based on URLs or hostnames.
+- Running microservices behind an API gateway.
+- Needing SSL termination, authentication, or request-level policies.
+
+Examples:
+
+- E-commerce websites
+- Video streaming platforms
+- SaaS applications
+- Kubernetes Ingress controllers
+
+---
+
+# Real-world examples
+
+| Load Balancer                 | Primarily Supports                              |
+| ----------------------------- | ----------------------------------------------- |
+| HAProxy                       | Layer 4 and Layer 7                             |
+| NGINX                         | Layer 7 (also supports Layer 4 stream proxying) |
+| Envoy                         | Layer 7 and modern service mesh use cases       |
+| Traefik                       | Layer 7                                         |
+| AWS Network Load Balancer     | Layer 4                                         |
+| AWS Application Load Balancer | Layer 7                                         |
+
+---
+
+# Interview-ready summary
+
+> **Layer 4 load balancing routes traffic using transport-layer information like IP addresses and ports, making it extremely fast and ideal for TCP/UDP services. Layer 7 load balancing understands application protocols such as HTTP and HTTPS, allowing routing based on URLs, hostnames, headers, cookies, and other request attributes. L4 is preferred for performance and protocol-agnostic traffic, while L7 is preferred for modern web applications, APIs, and microservices where intelligent request routing, SSL termination, and application-aware features are required.**
+
 ## Question 4. What is sticky session in load balancing?
 
 ## Question 5. How do you design a system with WebRTC support?

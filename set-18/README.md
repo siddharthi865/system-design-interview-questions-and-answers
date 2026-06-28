@@ -565,6 +565,287 @@ A reliable multicast system ensures correct and ordered delivery of messages to 
 
 ## Question 3. How do you design an email spam filtering system?
 
+## Direct answer
+
+An email spam filtering system is designed as a **multi-stage pipeline** that combines **rule-based filtering, reputation systems, and machine learning classification** to score incoming emails and decide whether to deliver, spam-folder, or reject them. At scale, the system is built around a **real-time inference pipeline + feature store + feedback loop for continuous learning**.
+
+---
+
+## Requirements / problem framing
+
+### Functional requirements
+
+- Classify incoming emails as:
+  - Legitimate (inbox)
+  - Spam (junk folder)
+  - Malicious (reject/quarantine)
+
+- Support near real-time decisioning (email cannot be delayed too long)
+- Allow user feedback (“Mark as spam / not spam”)
+- Support per-user customization (whitelists, blacklists)
+
+### Non-functional requirements
+
+- Very low latency (typically <100–300ms per email)
+- High throughput (millions/sec at provider scale)
+- High precision (false positives are very costly)
+- Adaptability to evolving spam tactics
+- Explainability for flagged emails
+
+---
+
+## High-level architecture
+
+```text id="spam_arch"
+Incoming Email
+     |
+     v
++----------------------+
+| Ingestion Gateway    |
++----------------------+
+     |
+     v
++----------------------+
+| Preprocessing Layer  |
+| - parsing headers    |
+| - text extraction    |
+| - URL extraction     |
++----------------------+
+     |
+     v
++----------------------+
+| Feature Extraction   |
+| - sender reputation  |
+| - domain reputation  |
+| - content features   |
+| - behavioral signals |
++----------------------+
+     |
+     v
++----------------------+
+| Spam Scoring Engine  |
+| - rules engine       |
+| - ML model (classifier)
++----------------------+
+     |
+     v
++----------------------+
+| Decision Service     |
+| inbox / spam / block |
++----------------------+
+     |
+     v
++----------------------+
+| Storage + Feedback   |
++----------------------+
+```
+
+---
+
+## Core system components
+
+### 1. Ingestion layer
+
+Handles SMTP/email gateway:
+
+- Receives email
+- Performs initial validation (SPF, DKIM, DMARC checks)
+- Rate limits abusive senders
+
+---
+
+### 2. Preprocessing layer
+
+Extracts structured data:
+
+- Subject/body parsing
+- HTML sanitization
+- URL extraction
+- Attachment scanning (optional antivirus)
+
+---
+
+### 3. Feature engineering layer (critical)
+
+#### Sender-based features
+
+- Domain age
+- IP reputation
+- Sending frequency
+- Bounce rate
+
+#### Content-based features
+
+- Spam keywords (“free money”, “urgent action”)
+- URL patterns
+- HTML-to-text ratio
+- Obfuscation patterns (e.g., “fr33”)
+
+#### Behavioral features
+
+- User marking history
+- Click-through rates
+- Deletion without reading
+
+---
+
+### 4. Spam detection engine (hybrid approach)
+
+#### A. Rule-based filters (fast path)
+
+- Blacklisted domains/IPs
+- Known phishing patterns
+- Virus signatures
+- Regulatory rules
+
+#### B. ML-based classifier (main intelligence layer)
+
+Typical models:
+
+- Logistic regression (baseline)
+- Gradient boosted trees (XGBoost/LightGBM)
+- Deep learning (transformers for text at scale)
+
+Output:
+
+- Spam probability score (0–1)
+
+---
+
+### 5. Decision engine
+
+Combines signals:
+
+```text
+final_score =
+  w1 * ML_score +
+  w2 * reputation_score +
+  w3 * rules_score
+```
+
+Decision thresholds:
+
+- > 0.9 → block/quarantine
+- 0.5–0.9 → spam folder
+- < 0.5 → inbox
+
+---
+
+## Deep design considerations
+
+### 1. Real-time vs batch trade-off
+
+- Real-time: needed for email delivery path
+- Batch: used for model training and reputation updates
+
+---
+
+### 2. Feature store design
+
+To avoid recomputing expensive features:
+
+- Online store (Redis / DynamoDB-like) → low latency
+- Offline store (data lake) → training data
+
+---
+
+### 3. Model update strategy
+
+Spam patterns evolve rapidly:
+
+- Daily retraining (batch)
+- Online learning for fast adaptation
+- Canary deployment of models
+
+---
+
+### 4. Feedback loop (critical for accuracy)
+
+User actions feed back into system:
+
+- “Mark as spam”
+- “Not spam”
+
+Used for:
+
+- supervised learning labels
+- sender reputation updates
+
+---
+
+### 5. Handling adversarial spam
+
+Spammers constantly adapt:
+
+- random text obfuscation
+- image-based spam
+- domain rotation
+
+Mitigation:
+
+- ensemble models
+- anomaly detection
+- heuristic + ML hybrid system
+
+---
+
+### 6. False positives handling
+
+Email systems must minimize:
+
+- legitimate emails marked as spam
+
+Solutions:
+
+- whitelist trusted senders
+- per-user customization
+- secondary confirmation for high-risk classification
+
+---
+
+### 7. Scaling considerations
+
+At Gmail-like scale:
+
+- millions of QPS
+- distributed inference clusters
+- caching sender reputation aggressively
+- partitioning by recipient or domain
+
+---
+
+## Trade-offs
+
+| Approach                     | Pros              | Cons                |
+| ---------------------------- | ----------------- | ------------------- |
+| Rules-only                   | fast, explainable | easy to bypass      |
+| ML-only                      | adaptive          | harder to interpret |
+| Hybrid (real-world standard) | best balance      | more complex        |
+
+---
+
+## Security / observability
+
+### Security
+
+- phishing detection (URL + domain analysis)
+- attachment sandboxing
+- DKIM/SPF/DMARC enforcement
+- malware scanning
+
+### Observability
+
+- spam precision/recall metrics
+- false positive tracking (critical KPI)
+- model drift detection
+- per-domain abuse dashboards
+
+---
+
+## Interview-ready summary
+
+A scalable spam filtering system uses a hybrid pipeline combining rule-based filters, reputation systems, and machine learning classification. Emails are ingested via an SMTP gateway, transformed into structured features, and scored in real time by an ensemble model. The final decision is made by combining ML scores, rules, and sender reputation. The system continuously improves through user feedback loops and periodic retraining, while maintaining low latency and extremely high precision to avoid false positives.
+
 ## Question 4. What is a relay server?
 
 ## Question 5. How do you design a web crawler like Googlebot?

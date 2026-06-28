@@ -981,6 +981,411 @@ This adheres to the **Open/Closed Principle**—the engine is open for extension
 
 ## Question 3. How do you design a loyalty points system?
 
+# Design a Loyalty Points System
+
+## Direct answer
+
+A loyalty points system allows users to **earn, track, redeem, and expire points** based on business rules. At the LLD (class diagram) level, the design should separate responsibilities into:
+
+- **Points accounts** for maintaining balances
+- **Transactions** for immutable audit history
+- **Reward rules** for calculating earned points
+- **Redemption service** for spending points
+- **Expiration policy** for handling point expiry
+
+The design should ensure that every balance change is recorded as an immutable transaction for auditability.
+
+---
+
+# Requirements / Problem Framing
+
+## Functional Requirements
+
+- Earn points from purchases
+- Redeem points for rewards
+- View current balance and transaction history
+- Expire points after a configurable period
+- Reverse points for refunds or canceled orders
+- Support different earning and redemption rules
+
+## Non-functional Requirements
+
+- Strong consistency for balance updates
+- Auditability (no loss of transaction history)
+- High availability
+- Idempotent processing for duplicate requests
+- Extensible rule engine
+
+---
+
+# Core Class Diagram
+
+```text
+                  +----------------------+
+                  |   LoyaltyService     |
+                  +----------------------+
+                  | rewardRule           |
+                  | accountRepository    |
+                  | transactionRepo      |
+                  +----------------------+
+                  | earnPoints()         |
+                  | redeemPoints()       |
+                  | reversePoints()      |
+                  +----------+-----------+
+                             |
+                --------------------------
+                |                        |
+        LoyaltyAccount          RewardRule
+                |                        |
+                |                +-------------------+
+                |                | SpendingRule      |
+                |                | TierBonusRule     |
+                |                | PromotionRule     |
+                |
+        PointTransaction
+                |
+        ExpirationPolicy
+```
+
+---
+
+# Main Classes
+
+## Customer
+
+```javascript
+class Customer {
+  constructor(id, name) {
+    this.id = id;
+    this.name = name;
+  }
+}
+```
+
+---
+
+## LoyaltyAccount
+
+Represents the customer's points wallet.
+
+```javascript
+class LoyaltyAccount {
+  constructor(customerId) {
+    this.customerId = customerId;
+    this.balance = 0;
+  }
+
+  credit(points) {
+    this.balance += points;
+  }
+
+  debit(points) {
+    if (this.balance < points) {
+      throw new Error("Insufficient points");
+    }
+
+    this.balance -= points;
+  }
+}
+```
+
+---
+
+## PointTransaction
+
+Instead of updating only the balance, every operation creates a transaction.
+
+```javascript
+class PointTransaction {
+  constructor(id, accountId, points, type, createdAt) {
+    this.id = id;
+    this.accountId = accountId;
+    this.points = points;
+    this.type = type;
+    this.createdAt = createdAt;
+  }
+}
+```
+
+Possible transaction types:
+
+```text
+EARN
+REDEEM
+EXPIRE
+REFUND
+ADJUSTMENT
+```
+
+This immutable transaction history enables auditing and reconciliation.
+
+---
+
+# Reward Rule
+
+Different businesses award points differently.
+
+```javascript
+class RewardRule {
+  calculate(order) {
+    throw new Error("Implement");
+  }
+}
+```
+
+---
+
+## Example Rule
+
+```javascript
+class SpendingRule extends RewardRule {
+  calculate(order) {
+    return Math.floor(order.total / 100);
+  }
+}
+```
+
+Example:
+
+```text
+₹100 spent
+
+↓
+
+1 point earned
+```
+
+---
+
+## Tier Bonus Rule
+
+```javascript
+class TierBonusRule extends RewardRule {
+  calculate(order, customer) {
+    let base = Math.floor(order.total / 100);
+
+    if (customer.tier === "GOLD") {
+      base *= 2;
+    }
+
+    return base;
+  }
+}
+```
+
+---
+
+# Redemption Rule
+
+Some rewards require a minimum balance or specific eligibility.
+
+```javascript
+class RedemptionRule {
+  canRedeem(account, points) {
+    return account.balance >= points;
+  }
+}
+```
+
+---
+
+# Expiration Policy
+
+Points may expire after a fixed period.
+
+```javascript
+class ExpirationPolicy {
+  shouldExpire(transaction, currentDate) {
+    const ageInDays =
+      (currentDate - transaction.createdAt) / (1000 * 60 * 60 * 24);
+
+    return ageInDays > 365;
+  }
+}
+```
+
+A scheduled job can periodically identify expired points and create `EXPIRE` transactions.
+
+---
+
+# Loyalty Service
+
+Coordinates all operations.
+
+```javascript
+class LoyaltyService {
+  constructor(repository, rewardRule) {
+    this.repository = repository;
+    this.rewardRule = rewardRule;
+  }
+
+  earnPoints(account, order) {
+    const points = this.rewardRule.calculate(order);
+
+    account.credit(points);
+
+    this.repository.saveTransaction(
+      new PointTransaction(
+        crypto.randomUUID(),
+        account.customerId,
+        points,
+        "EARN",
+        new Date(),
+      ),
+    );
+  }
+
+  redeemPoints(account, points) {
+    account.debit(points);
+
+    this.repository.saveTransaction(
+      new PointTransaction(
+        crypto.randomUUID(),
+        account.customerId,
+        -points,
+        "REDEEM",
+        new Date(),
+      ),
+    );
+  }
+}
+```
+
+---
+
+# Repository Layer
+
+```javascript
+class LoyaltyRepository {
+  getAccount(customerId) {}
+
+  saveAccount(account) {}
+
+  saveTransaction(transaction) {}
+
+  getTransactions(customerId) {}
+}
+```
+
+---
+
+# Sequence Flow
+
+### Earn Points
+
+```text
+Customer
+     |
+     | Purchase
+     v
+LoyaltyService
+     |
+     | Calculate points
+     v
+RewardRule
+     |
+     v
+LoyaltyAccount.credit()
+     |
+     v
+Create EARN transaction
+     |
+     v
+Persist account + transaction
+```
+
+---
+
+### Redeem Points
+
+```text
+Customer
+     |
+     | Redeem request
+     v
+LoyaltyService
+     |
+     | Validate balance
+     v
+LoyaltyAccount.debit()
+     |
+     v
+Create REDEEM transaction
+     |
+     v
+Persist changes
+```
+
+---
+
+# Design Considerations
+
+### Immutable Ledger
+
+Never overwrite history.
+
+Instead of:
+
+```text
+Balance = 150
+```
+
+Maintain:
+
+```text
++100 EARN
++50  EARN
+-30  REDEEM
++20  BONUS
+```
+
+Current balance:
+
+```text
+140
+```
+
+In practice, systems often store both:
+
+- A **materialized balance** in `LoyaltyAccount` for fast reads.
+- An **immutable transaction ledger** for auditing and rebuilding the balance if needed.
+
+---
+
+### Idempotency
+
+If the payment service retries the "earn points" request, the customer should not receive duplicate points.
+
+Store an idempotency key (for example, the order ID or payment ID) with each earning transaction and ignore duplicate requests.
+
+---
+
+### Concurrency
+
+Two simultaneous redemption requests could overspend the balance.
+
+Use:
+
+- Database transactions with row-level locking, or
+- Optimistic locking using a version field.
+
+---
+
+# Design Patterns Used
+
+| Pattern       | Usage                                  |
+| ------------- | -------------------------------------- |
+| Strategy      | Different earning and redemption rules |
+| Repository    | Database abstraction                   |
+| Service Layer | Coordinates business logic             |
+| Policy        | Encapsulates expiration behavior       |
+
+---
+
+# Interview-ready Summary
+
+> "I'd model the loyalty system around a `LoyaltyAccount` that maintains the current balance and an immutable `PointTransaction` ledger for every credit, debit, expiry, refund, or adjustment. A `LoyaltyService` orchestrates earning and redemption, while pluggable `RewardRule` and `RedemptionRule` strategies encapsulate business logic. An `ExpirationPolicy` handles point expiry, and idempotency plus transactional updates ensure customers neither receive duplicate points nor overspend their balance. This design is auditable, strongly consistent, and easy to extend with new loyalty programs."
+
 ## Question 4. How do you design a micro-billing system for pay-per-use services?
 
 ## Question 5. How do you design a personal budgeting system?

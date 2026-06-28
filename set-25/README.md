@@ -1093,6 +1093,333 @@ Distributed tracing helps isolate latency bottlenecks across the fraud pipeline.
 
 ## Question 3. What is Lambda Architecture in data processing?
 
+# Direct answer
+
+**Lambda Architecture** is a data processing architecture that combines **batch processing** and **stream processing** to provide both **accurate historical results** and **low-latency real-time results**.
+
+The core idea is:
+
+- The **Batch Layer** computes accurate results over all historical data.
+- The **Speed Layer** processes recent events in real time before the batch layer catches up.
+- The **Serving Layer** merges results from both layers to answer queries.
+
+It was introduced to overcome the trade-off between the high accuracy of batch systems and the low latency of stream processing systems.
+
+---
+
+# Why was Lambda Architecture introduced?
+
+Traditional batch systems (e.g., Hadoop) are highly accurate but slow.
+
+```text
+Event arrives
+      |
+Batch job runs every 6 hours
+      |
+Result available after hours
+```
+
+Pure streaming systems provide immediate results but can struggle with late-arriving data, failures, or complex recomputations.
+
+Lambda combines the strengths of both approaches.
+
+---
+
+# High-Level Architecture
+
+```text
+                  Data Sources
+                       |
+                Event Ingestion
+                 (Kafka/Pulsar)
+                       |
+        ---------------------------------
+        |                               |
+   Batch Layer                    Speed Layer
+ (Historical Processing)     (Real-time Processing)
+        |                               |
+ Batch Views                    Real-time Views
+        |                               |
+        -----------Serving Layer---------
+                    |
+               Query/API Layer
+```
+
+---
+
+# Components
+
+## 1. Batch Layer
+
+The batch layer stores the **immutable master dataset** and periodically recomputes results from scratch.
+
+Responsibilities:
+
+- Store all raw events
+- Perform large-scale computations
+- Generate accurate batch views
+- Correct errors from previous computations
+
+Typical technologies:
+
+- Hadoop
+- Spark
+- Distributed file systems (e.g., HDFS or cloud object storage)
+
+Example:
+
+```text
+All purchase events
+
+↓
+
+Nightly Spark job
+
+↓
+
+Total revenue per merchant
+```
+
+### Advantages
+
+- Highly accurate
+- Fault tolerant
+- Easy to recompute from raw data
+
+### Disadvantage
+
+High latency.
+
+---
+
+## 2. Speed Layer
+
+The speed layer processes new events immediately.
+
+Responsibilities:
+
+- Process incoming events
+- Compute incremental updates
+- Produce low-latency views
+
+Typical technologies:
+
+- Apache Flink
+- Apache Storm
+- Spark Streaming
+- Kafka Streams
+
+Example:
+
+```text
+Purchase Event
+
+↓
+
+Update merchant revenue immediately
+```
+
+Latency:
+
+Milliseconds to seconds.
+
+---
+
+## 3. Serving Layer
+
+The serving layer exposes queryable data.
+
+When a query arrives:
+
+```text
+Historical Batch Result
+
++
+
+Real-time Increment
+
+↓
+
+Final Answer
+```
+
+Example:
+
+Suppose:
+
+Batch layer says
+
+```text
+Revenue = $2,000,000
+```
+
+Speed layer says
+
+```text
+Revenue since last batch = $8,000
+```
+
+User query returns
+
+```text
+$2,008,000
+```
+
+---
+
+# Data Flow
+
+```text
+Event arrives
+      |
+      +----------------------+
+      |                      |
+      |                  Speed Layer
+      |                      |
+      |               Increment View
+      |
+Batch Storage
+      |
+Batch Processing
+      |
+Batch View
+      |
+Serving Layer
+      |
+Client Query
+```
+
+---
+
+# Example: Real-Time Analytics Dashboard
+
+Suppose you're building an analytics dashboard.
+
+Without Lambda:
+
+```text
+Sales update every 24 hours
+```
+
+Dashboard is stale.
+
+With Lambda:
+
+```text
+Yesterday's totals
+
++
+
+Today's live sales
+
+↓
+
+Current dashboard
+```
+
+Users always see near real-time metrics while maintaining historical accuracy.
+
+---
+
+# Advantages
+
+### 1. Low Latency
+
+Recent events become visible almost immediately.
+
+---
+
+### 2. Accurate Historical Results
+
+Batch jobs periodically recompute results from the complete dataset, correcting any errors or missed events.
+
+---
+
+### 3. Fault Tolerance
+
+If the streaming layer misses events due to failures, the next batch recomputation restores correctness.
+
+---
+
+### 4. Scalability
+
+Both batch and stream processing can scale horizontally by adding more workers.
+
+---
+
+# Challenges
+
+The biggest drawback is **operational complexity**.
+
+You maintain two processing pipelines:
+
+- Batch pipeline
+- Streaming pipeline
+
+Both must implement the same business logic.
+
+Example:
+
+```text
+Fraud Detection Rule
+
+↓
+
+Implemented in Spark
+
+AND
+
+Implemented again in Flink
+```
+
+This duplication increases development effort and the risk of inconsistencies.
+
+---
+
+# Lambda vs. Kappa Architecture
+
+| Feature                  | Lambda                                 | Kappa                                  |
+| ------------------------ | -------------------------------------- | -------------------------------------- |
+| Processing pipelines     | Two (batch + stream)                   | One (stream only)                      |
+| Historical recomputation | Batch recomputation                    | Replay event log                       |
+| Complexity               | Higher                                 | Lower                                  |
+| Latency                  | Low                                    | Very low                               |
+| Code duplication         | Yes                                    | No                                     |
+| Best for                 | Mixed historical + real-time workloads | Event-driven systems with durable logs |
+
+---
+
+# Common Use Cases
+
+Lambda Architecture is well suited for:
+
+- Real-time fraud detection
+- Recommendation systems
+- Clickstream analytics
+- IoT sensor processing
+- Financial trading analytics
+- Network monitoring
+- Operational dashboards
+- Log analytics
+
+---
+
+# Trade-offs
+
+| Pros                              | Cons                                 |
+| --------------------------------- | ------------------------------------ |
+| Low-latency results               | Two processing pipelines to maintain |
+| Accurate historical recomputation | Duplicate business logic             |
+| Fault tolerant                    | Higher infrastructure cost           |
+| Scales well                       | More operational complexity          |
+| Handles late-arriving data        | Harder to test and debug             |
+
+---
+
+# Interview-ready summary
+
+> "Lambda Architecture combines a **batch layer** for accurate historical computation with a **speed layer** for low-latency processing, and a **serving layer** that merges results from both. This provides real-time responsiveness while preserving correctness through periodic batch recomputation. Its main trade-off is operational complexity because the same business logic must often be implemented and maintained in both the batch and streaming pipelines. Today, many organizations prefer Kappa Architecture when a durable event log and mature stream processing framework can satisfy both real-time and replay requirements."
+
 ## Question 4. How would you design an append-only log store?
 
 ## Question 5. How do you implement deduplication at scale (like Gmail threads)?

@@ -795,6 +795,342 @@ Tools:
 
 ## Question 3. What is fault tolerance in system design?
 
+# Direct answer
+
+**Fault tolerance** is the ability of a system to continue operating correctly even when some of its components fail. The goal is to minimize service disruption and avoid a single point of failure.
+
+In large-scale distributed systems, failures are expected—not exceptional. A fault-tolerant system is designed to detect failures, isolate them, recover automatically, and continue serving users.
+
+---
+
+# Understanding with an Example
+
+Without fault tolerance:
+
+```text
+Users
+  |
+Server A
+```
+
+If Server A crashes:
+
+```text
+Users
+  |
+Server A (DOWN)
+
+System unavailable
+```
+
+With fault tolerance:
+
+```text
+           Load Balancer
+          /             \
+     Server A       Server B
+```
+
+If Server A fails:
+
+```text
+           Load Balancer
+                  |
+             Server B
+```
+
+Users can still access the service.
+
+---
+
+# Common Types of Failures
+
+### Hardware Failures
+
+- Disk crashes
+- Memory failures
+- Power outages
+- Server failures
+
+### Network Failures
+
+- Packet loss
+- Network partitions
+- DNS failures
+- High latency
+
+### Software Failures
+
+- Application crashes
+- Memory leaks
+- Deployment bugs
+- Dependency failures
+
+### Infrastructure Failures
+
+- Datacenter outages
+- Cloud region failures
+- Load balancer failures
+
+---
+
+# Techniques for Achieving Fault Tolerance
+
+## 1. Redundancy
+
+Maintain multiple copies of critical components.
+
+### Application Servers
+
+```text
+Load Balancer
+    |
+------------
+|    |     |
+A    B     C
+```
+
+If one server fails, others continue serving traffic.
+
+### Databases
+
+```text
+Primary DB
+   |
+Replicas
+```
+
+If a replica fails, others remain available.
+
+---
+
+## 2. Replication
+
+Store data on multiple nodes.
+
+```text
+User Data
+   |
+-------------
+|     |     |
+N1    N2    N3
+```
+
+Benefits:
+
+- Data durability
+- Faster recovery
+- Higher availability
+
+---
+
+## 3. Automatic Failover
+
+When a component fails, traffic is automatically redirected.
+
+Example:
+
+```text
+Primary DB (DOWN)
+        |
+Automatic Failover
+        |
+Secondary DB becomes Primary
+```
+
+Users experience minimal downtime.
+
+---
+
+## 4. Health Checks
+
+Continuously monitor components.
+
+```text
+Load Balancer
+      |
+ Health Checks
+      |
+ Server A
+```
+
+Unhealthy servers are removed from traffic routing.
+
+---
+
+## 5. Retry Mechanisms
+
+Temporary failures often resolve themselves.
+
+```text
+Request
+   |
+Failure
+   |
+Retry
+   |
+Success
+```
+
+Use:
+
+- Exponential backoff
+- Retry limits
+- Jitter
+
+Avoid retry storms.
+
+---
+
+## 6. Circuit Breaker Pattern
+
+Prevent repeated calls to a failing service.
+
+Without circuit breaker:
+
+```text
+Service A -> Service B (failing)
+```
+
+Thousands of requests continue hitting B.
+
+With circuit breaker:
+
+```text
+Service A
+   |
+Circuit Open
+   |
+Fallback Response
+```
+
+This prevents cascading failures.
+
+---
+
+## 7. Graceful Degradation
+
+Provide reduced functionality instead of complete failure.
+
+Example:
+
+E-commerce site:
+
+```text
+Search Works
+Recommendations Fail
+```
+
+Users can still purchase products.
+
+Better than:
+
+```text
+Entire Website Down
+```
+
+---
+
+## 8. Data Backups and Disaster Recovery
+
+Protect against catastrophic failures.
+
+Strategies:
+
+- Periodic backups
+- Point-in-time recovery
+- Multi-region replication
+
+Example:
+
+```text
+Region A Failure
+      |
+Traffic shifted
+      |
+Region B
+```
+
+---
+
+# Fault Tolerance vs High Availability
+
+| Aspect           | Fault Tolerance                     | High Availability               |
+| ---------------- | ----------------------------------- | ------------------------------- |
+| Goal             | Continue operating despite failures | Minimize downtime               |
+| Failure Handling | System keeps functioning            | System recovers quickly         |
+| Redundancy       | Required                            | Usually required                |
+| Cost             | Higher                              | Lower than full fault tolerance |
+
+### Example
+
+**High Availability**
+
+```text
+Primary fails
+↓
+30 seconds downtime
+↓
+Backup starts
+```
+
+**Fault Tolerance**
+
+```text
+Primary fails
+↓
+Backup already active
+↓
+No visible interruption
+```
+
+---
+
+# Trade-offs
+
+| Benefit                 | Cost                     |
+| ----------------------- | ------------------------ |
+| Higher reliability      | More infrastructure      |
+| Better uptime           | Increased complexity     |
+| Faster recovery         | Higher operational cost  |
+| Reduced business impact | More replication/storage |
+
+There is no such thing as perfect fault tolerance. The goal is to achieve an acceptable level of reliability based on business requirements.
+
+---
+
+# Real-World Examples
+
+### Netflix
+
+Uses:
+
+- Multi-region deployments
+- Redundant services
+- Chaos engineering (intentionally injecting failures)
+
+### Amazon
+
+Uses:
+
+- Multiple Availability Zones
+- Replicated storage
+- Automatic failover
+
+### Google
+
+Uses:
+
+- Distributed storage
+- Replication across data centers
+- Self-healing infrastructure
+
+---
+
+# Interview-ready Summary
+
+"Fault tolerance is the ability of a system to continue functioning when components fail. It is achieved through redundancy, replication, failover mechanisms, health checks, retries, circuit breakers, and disaster recovery strategies. In distributed systems, failures are inevitable, so systems are designed to detect failures automatically and continue serving users with minimal or no interruption."
+
 ## Question 4. What are leader election algorithms (like Raft, Paxos)?
 
 ## Question 5. What is consensus in distributed systems?

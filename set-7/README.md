@@ -1253,6 +1253,475 @@ Use centralized logging, metrics, distributed tracing, and alerts.
 
 ## Question 3. How do you design a calendar booking system?
 
+# Design a Calendar Booking System
+
+## Direct Answer
+
+A calendar booking system (like Google Calendar, Calendly, or Microsoft Outlook) allows users to create calendars, schedule events, invite attendees, check availability, and avoid scheduling conflicts. The biggest design challenge is **efficiently managing availability and preventing conflicting bookings** while supporting real-time updates, recurring events, reminders, and synchronization across devices.
+
+---
+
+# 1. Requirements / Problem Framing
+
+## Functional Requirements
+
+### User Features
+
+- User registration and authentication
+- Create multiple calendars
+- Create, update, and delete events
+- View calendar (day/week/month)
+- Invite attendees
+- Accept/decline invitations
+- Check participant availability (free/busy)
+- Support recurring events
+- Receive reminders (email, SMS, push)
+- Search events
+
+### Admin Features
+
+- Manage users
+- Audit logs
+- Organization-wide calendars (optional)
+
+---
+
+## Non-functional Requirements
+
+- High availability
+- Low latency (<200 ms)
+- Prevent conflicting bookings
+- Real-time synchronization across devices
+- Support millions of users
+- Durable event storage
+- Time zone awareness
+
+---
+
+# 2. High-Level Architecture
+
+```text
+                  Mobile / Web Clients
+                           |
+                    Load Balancer
+                           |
+                     API Gateway
+                           |
+ ---------------------------------------------------------
+ |          |           |            |                  |
+Calendar   Event     Booking     Notification      Search
+Service    Service    Service       Service         Service
+      \        |          |              |          /
+       \-------|----------|--------------|---------/
+                      Event Bus (Kafka)
+                             |
+                  Reminder Scheduler
+                             |
+                   Email / SMS / Push
+
+Storage
+--------
+User DB
+Calendar DB
+Event DB
+Redis Cache
+Search Index
+```
+
+---
+
+# 3. Core Components
+
+## Calendar Service
+
+Manages:
+
+- Calendar creation
+- Ownership
+- Sharing permissions
+- Time zones
+
+Example:
+
+```text
+Calendar
+---------
+calendar_id
+owner_id
+name
+timezone
+visibility
+```
+
+---
+
+## Event Service
+
+Responsible for:
+
+- Creating events
+- Updating events
+- Deleting events
+- Managing attendees
+- Recurring event generation
+
+```text
+Event
+-------
+event_id
+calendar_id
+title
+start_time
+end_time
+timezone
+recurrence_rule
+status
+```
+
+---
+
+## Booking (Availability) Service
+
+This is the heart of the system.
+
+Responsibilities:
+
+- Check participant availability
+- Detect scheduling conflicts
+- Reserve time slots
+- Prevent double booking
+
+---
+
+## Notification Service
+
+Sends:
+
+- Event invitations
+- RSVP updates
+- Reminder notifications
+- Event cancellation messages
+
+Runs asynchronously.
+
+---
+
+# 4. Database Design
+
+## Event Table
+
+```text
+event_id
+calendar_id
+title
+start_time
+end_time
+timezone
+recurrence_rule
+status
+```
+
+Indexes:
+
+```text
+calendar_id
+start_time
+end_time
+```
+
+---
+
+## Attendee Table
+
+```text
+event_id
+user_id
+response_status
+```
+
+Response status:
+
+- Pending
+- Accepted
+- Declined
+- Tentative
+
+---
+
+## Calendar Table
+
+```text
+calendar_id
+owner_id
+timezone
+visibility
+```
+
+---
+
+# 5. Booking Flow
+
+```text
+User selects time slot
+        |
+Check participant availability
+        |
+No conflicts?
+   /           \
+ Yes            No
+ |               |
+Create Event   Return conflict
+ |
+Store Event
+ |
+Publish EventCreated
+ |
+Send Invitations
+```
+
+---
+
+# 6. Preventing Double Booking
+
+Suppose a meeting room or a user's calendar already has:
+
+```text
+10:00 AM – 11:00 AM
+```
+
+Another user attempts to schedule:
+
+```text
+10:30 AM – 11:30 AM
+```
+
+This must be rejected (or flagged as a conflict).
+
+### Option 1: Database Transaction + Row Lock
+
+```sql
+BEGIN;
+
+SELECT *
+FROM events
+WHERE calendar_id = ?
+FOR UPDATE;
+
+Check overlapping intervals
+
+Insert event
+
+COMMIT;
+```
+
+Pros:
+
+- Strong consistency
+- Simple implementation
+
+Cons:
+
+- Reduced concurrency under heavy contention
+
+---
+
+### Option 2: Optimistic Locking
+
+Maintain a version number on the calendar.
+
+```text
+version = 12
+```
+
+Update only if the version hasn't changed.
+
+Pros:
+
+- Better scalability
+- No long-held locks
+
+Cons:
+
+- Requires retries under contention
+
+---
+
+### Option 3 (Preferred)
+
+Use transactional overlap checks on indexed time intervals. For highly contended shared resources (e.g., meeting rooms), combine with short-lived locks to guarantee no conflicting bookings.
+
+---
+
+# 7. Handling Recurring Events
+
+Instead of storing every occurrence separately, store a recurrence rule.
+
+Example:
+
+```text
+Every Monday
+10:00–11:00
+Until Dec 31
+```
+
+```text
+RRULE:
+FREQ=WEEKLY
+BYDAY=MO
+UNTIL=20261231
+```
+
+Occurrences are generated on demand or precomputed for a configurable time window.
+
+---
+
+# 8. Availability Search
+
+Finding free slots for multiple attendees:
+
+```text
+User A:
+09–10
+13–15
+
+User B:
+10–12
+14–16
+```
+
+Intersection:
+
+```text
+12–13
+```
+
+To optimize:
+
+- Store events sorted by start time
+- Use interval trees or balanced interval indexes
+- Cache frequently requested free/busy information in Redis
+
+---
+
+# 9. Scaling Strategy
+
+## Stateless Services
+
+```text
+LB
+ |
+API Server 1
+API Server 2
+API Server 3
+```
+
+Easy horizontal scaling.
+
+---
+
+## Caching
+
+Redis stores:
+
+- User calendars
+- Upcoming events
+- Free/busy summaries
+- Frequently accessed calendars
+
+---
+
+## Database Scaling
+
+### Read Replicas
+
+```text
+Primary
+  |
+Read Replica 1
+Read Replica 2
+```
+
+Reads (calendar views) go to replicas.
+
+Writes (event creation/updates) go to the primary.
+
+---
+
+## Search
+
+Use Elasticsearch/OpenSearch for:
+
+- Event title search
+- Participant search
+- Location search
+
+---
+
+# 10. Reminder Scheduling
+
+When an event is created:
+
+```text
+Event Created
+      |
+Reminder Scheduler
+      |
+Schedule jobs:
+- 1 day before
+- 1 hour before
+- 10 minutes before
+      |
+Notification Service
+      |
+Email / Push / SMS
+```
+
+A delayed queue or scheduler service ensures reminders are sent at the correct time.
+
+---
+
+# 11. Security / Observability
+
+### Security
+
+- OAuth/JWT authentication
+- Role-based access control
+- Calendar sharing permissions (owner, editor, viewer)
+- TLS encryption
+- Audit logs for calendar changes
+
+### Observability
+
+Monitor:
+
+- Event creation latency
+- Conflict detection failures
+- Reminder delivery success
+- API latency
+- Cache hit ratio
+- Database query performance
+- Queue backlog
+
+Use centralized logging, metrics, distributed tracing, and alerts.
+
+---
+
+# 12. Trade-offs
+
+| Design Choice                              | Pros                                            | Cons                                    |
+| ------------------------------------------ | ----------------------------------------------- | --------------------------------------- |
+| SQL database for events                    | ACID guarantees and reliable conflict detection | Write scaling is more challenging       |
+| Redis cache                                | Fast calendar reads                             | Cache invalidation complexity           |
+| Event-driven reminders                     | Decoupled and scalable                          | Eventual consistency for notifications  |
+| Generate recurring events on demand        | Lower storage usage                             | Higher computation during queries       |
+| Materialize recurring events ahead of time | Faster reads                                    | Increased storage and update complexity |
+
+---
+
+# Interview-Ready Summary
+
+> "I would design the calendar booking system using stateless microservices for Calendar, Event, Booking, Notification, and Search. Events would be stored in a relational database to leverage ACID transactions for conflict detection. Redis would cache upcoming events and free/busy information, while a search engine would power fast event searches. A scheduler backed by an event bus would trigger reminders asynchronously. The critical challenge is preventing overlapping bookings, which I'd solve using transactional interval-overlap checks with appropriate locking or optimistic concurrency, depending on contention."
+
 ## Question 4. How do you design a document versioning system?
 
 ## Question 5. How do you design a banking transaction system?

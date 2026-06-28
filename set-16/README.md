@@ -349,6 +349,178 @@ In these cases, a distributed cache such as Redis is typically a better choice.
 
 ## Question 3. What is a cold cache vs a warm cache?
 
+# Cold Cache vs. Warm Cache
+
+## Direct answer
+
+A **cold cache** is a cache that is empty or contains very little useful data, resulting in many **cache misses**. A **warm cache** has already been populated with frequently accessed data, resulting in a high **cache hit rate** and lower latency.
+
+The difference mainly affects **performance**, not correctness.
+
+---
+
+## Cold Cache
+
+A cold cache occurs when:
+
+- A cache server has just started.
+- The cache has been cleared or expired.
+- A new node has been added to the cluster.
+- Data has never been requested before.
+
+Example:
+
+```text
+User Request
+      │
+      ▼
+   Cache (Empty)
+      │
+ Cache Miss
+      │
+      ▼
+   Database
+      │
+      ▼
+ Cache Updated
+      │
+      ▼
+ User Response
+```
+
+### Characteristics
+
+- Many cache misses
+- Higher database load
+- Higher latency
+- Slower response times
+- Cache gradually fills with frequently accessed data
+
+---
+
+## Warm Cache
+
+A warm cache contains data that has already been loaded from previous requests.
+
+Example:
+
+```text
+User Request
+      │
+      ▼
+ Cache
+      │
+ Cache Hit
+      │
+      ▼
+ User Response
+```
+
+### Characteristics
+
+- High cache hit rate
+- Lower latency
+- Reduced database traffic
+- Better throughput
+- Faster user experience
+
+---
+
+## Comparison
+
+| Aspect              | Cold Cache            | Warm Cache                              |
+| ------------------- | --------------------- | --------------------------------------- |
+| Cache contents      | Empty or mostly empty | Frequently accessed data already stored |
+| Cache hit rate      | Low                   | High                                    |
+| Database load       | High                  | Low                                     |
+| Response time       | Slower                | Faster                                  |
+| Startup performance | Poor                  | Good                                    |
+| User experience     | Initial slowdown      | Smooth and responsive                   |
+
+---
+
+## Real-world example
+
+Imagine an e-commerce website.
+
+### Cold cache
+
+The cache is empty after a deployment.
+
+```text
+Request:
+Product #123
+
+Cache → Miss
+Database → Read
+Cache ← Store
+Response
+```
+
+The first user experiences higher latency.
+
+---
+
+### Warm cache
+
+Later requests for the same product:
+
+```text
+Request:
+Product #123
+
+Cache → Hit
+Response
+```
+
+No database query is needed, making the response much faster.
+
+---
+
+## How to warm a cache
+
+Many production systems avoid cold-start performance by proactively populating caches.
+
+Common techniques include:
+
+- **Preloading popular data** during application startup
+- **Background cache warming** jobs
+- **Scheduled jobs** to refresh frequently accessed data
+- **Lazy loading**, where the first request populates the cache
+- **Predictive warming** based on historical traffic patterns
+
+Example:
+
+```text
+Application Starts
+        │
+        ▼
+Background Job
+        │
+        ▼
+Load Top 10,000 Products
+        │
+        ▼
+Cache Ready
+```
+
+---
+
+## Trade-offs
+
+| Cold Cache             | Warm Cache                             |
+| ---------------------- | -------------------------------------- |
+| Faster startup         | Requires time or resources to populate |
+| Higher initial latency | Lower request latency                  |
+| More database traffic  | Less database traffic                  |
+| Simpler deployment     | May require cache warming strategies   |
+
+---
+
+## Interview-ready summary
+
+> A cold cache is empty or sparsely populated, so requests experience frequent cache misses, higher latency, and increased database load. A warm cache already contains commonly accessed data, resulting in high cache hit rates, lower latency, and better throughput. Large-scale systems often use cache warming techniques—such as preloading popular data or background refresh jobs—to minimize the performance impact of cold starts after deployments or restarts.
+
 ## Question 4. What is a dead letter queue (DLQ)?
 
 ## Question 5. What is an append-only log in distributed systems?

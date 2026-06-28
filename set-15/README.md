@@ -667,6 +667,256 @@ This minimizes database lookups while allowing efficient session management.
 
 ## Question 3. What is a man-in-the-middle (MITM) attack?
 
+# What is a Man-in-the-Middle (MITM) Attack?
+
+## Direct answer
+
+A **Man-in-the-Middle (MITM) attack** is a cyberattack where an attacker secretly intercepts and possibly modifies communication between two parties who believe they are communicating directly.
+
+The attacker can:
+
+- Eavesdrop on sensitive data (passwords, credit card numbers, session tokens)
+- Modify messages in transit
+- Inject malicious content
+- Impersonate either party
+
+---
+
+# How a MITM Attack Works
+
+### Normal Communication
+
+```text
+Client -----------------------> Server
+         Secure communication
+```
+
+---
+
+### During a MITM Attack
+
+```text
+Client ---------> Attacker ---------> Server
+         <---------         <---------
+```
+
+The attacker sits between the client and server, relaying traffic so that neither side realizes the communication has been intercepted.
+
+---
+
+# Example Scenario
+
+Suppose a user connects to public Wi-Fi.
+
+```text
+Laptop
+   |
+Public Wi-Fi
+   |
+Attacker
+   |
+Bank Server
+```
+
+If the connection is not properly secured:
+
+1. The user sends login credentials.
+2. The attacker intercepts them.
+3. The attacker forwards the request to the bank.
+4. The user logs in successfully and notices nothing unusual.
+5. Meanwhile, the attacker has stolen the credentials.
+
+---
+
+# Common Types of MITM Attacks
+
+### 1. Wi-Fi Eavesdropping
+
+An attacker creates a fake public hotspot.
+
+```text
+Free Airport Wi-Fi
+```
+
+Users connect, and all their traffic passes through the attacker's device.
+
+---
+
+### 2. ARP Spoofing
+
+On a local network, the attacker sends forged Address Resolution Protocol (ARP) messages to associate their device with the gateway's IP address.
+
+```text
+Victim
+   |
+Attacker
+   |
+Router
+```
+
+The victim unknowingly sends network traffic to the attacker first.
+
+---
+
+### 3. DNS Spoofing
+
+The attacker manipulates Domain Name System (DNS) responses.
+
+```text
+bank.com
+      ↓
+
+Attacker redirects to
+
+fake-bank.com
+```
+
+The victim may believe they are on the legitimate site.
+
+---
+
+### 4. SSL/TLS Stripping
+
+The attacker downgrades a secure HTTPS connection to unencrypted HTTP.
+
+```text
+Browser
+    |
+HTTPS
+    |
+
+Attacker
+
+    |
+HTTP
+    |
+Server
+```
+
+Without encryption, the attacker can read and modify traffic.
+
+---
+
+### 5. Session Hijacking
+
+Instead of stealing passwords, the attacker steals a session cookie or authentication token.
+
+```text
+Login
+    |
+Session Cookie
+    |
+Attacker steals cookie
+    |
+Attacker impersonates user
+```
+
+---
+
+# What Can an Attacker Steal?
+
+- Usernames
+- Passwords
+- Session cookies
+- Authentication tokens
+- Credit card details
+- Personal information
+- API keys
+- Private messages
+
+---
+
+# How to Prevent MITM Attacks
+
+## 1. Use HTTPS Everywhere
+
+All communication should be encrypted using Transport Layer Security (TLS).
+
+```text
+Client
+    |
+Encrypted
+    |
+Server
+```
+
+Even if traffic is intercepted, the attacker cannot easily read its contents.
+
+---
+
+## 2. Validate TLS Certificates
+
+Clients should verify that the server's certificate:
+
+- Is signed by a trusted Certificate Authority (CA)
+- Matches the domain name
+- Has not expired or been revoked
+
+Browsers warn users when certificate validation fails.
+
+---
+
+## 3. Enable HSTS
+
+HTTP Strict Transport Security (HSTS) forces browsers to use HTTPS and prevents downgrade attacks such as SSL stripping.
+
+---
+
+## 4. Certificate Pinning (When Appropriate)
+
+Applications can be configured to trust only specific server certificates or public keys, making forged certificates ineffective. While useful in some controlled environments, it requires careful operational management.
+
+---
+
+## 5. Secure Wi-Fi
+
+- Use encrypted Wi-Fi (WPA2/WPA3)
+- Avoid untrusted public hotspots
+- Verify the network before connecting
+
+---
+
+## 6. Use a VPN on Untrusted Networks
+
+A VPN encrypts traffic between the user's device and the VPN server, reducing the risk of interception on public networks.
+
+---
+
+## 7. Multi-Factor Authentication (MFA)
+
+Even if an attacker steals a password, MFA makes it much harder to access the account without the second authentication factor.
+
+---
+
+# MITM in System Design
+
+When designing secure distributed systems:
+
+- Enforce HTTPS/TLS for all APIs and internal service communication where appropriate.
+- Encrypt sensitive data in transit.
+- Validate certificates on both clients and servers.
+- Secure session tokens (e.g., `Secure` and `HttpOnly` cookies).
+- Use short-lived access tokens and support token revocation.
+- Monitor for suspicious login activity and unusual network behavior.
+
+---
+
+# Trade-offs
+
+| Security Measure    | Advantages                                    | Limitations                                                |
+| ------------------- | --------------------------------------------- | ---------------------------------------------------------- |
+| TLS/HTTPS           | Encrypts data in transit                      | Requires proper certificate management                     |
+| HSTS                | Prevents HTTPS downgrade attacks              | Only effective after browser support/policy is established |
+| VPN                 | Protects traffic on untrusted networks        | Doesn't protect against compromised endpoints              |
+| MFA                 | Limits damage from stolen credentials         | Adds some user friction                                    |
+| Certificate Pinning | Strong protection against forged certificates | Operational complexity during certificate rotation         |
+
+---
+
+# Interview-ready Summary
+
+> A Man-in-the-Middle (MITM) attack occurs when an attacker secretly intercepts communication between a client and a server, allowing them to read or modify data without either party's knowledge. The primary defense is enforcing TLS/HTTPS with proper certificate validation, complemented by HSTS, secure session management, MFA, and encrypted communication across all network paths. In system design, protecting data **in transit** is a fundamental security requirement to mitigate MITM attacks.
+
 ## Question 4. What is CSRF and how do you prevent it?
 
 ## Question 5. How do you design a secure multi-tenant system?

@@ -859,6 +859,227 @@ It is often **not** worth the complexity for:
 
 ## Question 3. What is an RPC (Remote Procedure Call)?
 
+# Direct answer
+
+A **Remote Procedure Call (RPC)** is a communication mechanism that allows a program to invoke a function or method running on another machine **as if it were a local function call**. The RPC framework hides the complexities of network communication, serialization, and transport from the developer.
+
+In simple terms:
+
+> **RPC makes calling a remote service feel like calling a local method.**
+
+Examples include gRPC, Apache Thrift, and JSON-RPC.
+
+---
+
+# How RPC works
+
+Suppose Service A needs user information from Service B.
+
+Instead of manually constructing HTTP requests:
+
+```text
+GET /users/123
+```
+
+You simply call:
+
+```javascript
+const user = userService.getUser(123);
+```
+
+Behind the scenes, the RPC framework:
+
+1. Serializes the request into bytes.
+2. Sends it over the network.
+3. Executes the method on the remote server.
+4. Serializes the response.
+5. Returns the result to the caller.
+
+The network communication is abstracted away.
+
+---
+
+# Architecture
+
+```text
+Service A
+
+getUser(123)
+
+↓
+
+Client Stub (Proxy)
+
+↓
+
+Serialize Request
+
+↓
+
+Network (HTTP/2, TCP, etc.)
+
+↓
+
+Server Stub
+
+↓
+
+User Service
+
+↓
+
+Response
+
+↓
+
+Client receives result
+```
+
+The **client stub** acts as a local proxy, while the **server stub** unmarshals the request, invokes the actual method, and returns the response.
+
+---
+
+# Components
+
+### 1. Client
+
+Calls a method that appears local.
+
+```javascript
+const user = userService.getUser(123);
+```
+
+---
+
+### 2. Client Stub (Proxy)
+
+Responsible for:
+
+- Serializing parameters
+- Sending the request
+- Receiving the response
+- Deserializing the result
+
+---
+
+### 3. Network Transport
+
+Carries the request.
+
+Common transports:
+
+- HTTP/2 (used by gRPC)
+- TCP
+- QUIC (in some modern implementations)
+
+---
+
+### 4. Server Stub
+
+Responsible for:
+
+- Deserializing the request
+- Calling the appropriate method
+- Serializing the response
+
+---
+
+### 5. Server
+
+Executes the business logic.
+
+```javascript
+function getUser(id) {
+  return database.find(id);
+}
+```
+
+---
+
+# Serialization
+
+Since objects cannot be sent directly over the network, RPC frameworks serialize them.
+
+Common formats:
+
+| Format           | Characteristics                 |
+| ---------------- | ------------------------------- |
+| Protocol Buffers | Compact, fast, strongly typed   |
+| JSON             | Human-readable, larger payloads |
+| Avro             | Common in data pipelines        |
+| MessagePack      | Binary and compact              |
+
+For example, gRPC typically uses **Protocol Buffers**, which are smaller and faster than JSON.
+
+---
+
+# RPC vs REST
+
+| Feature              | RPC                   | REST                   |
+| -------------------- | --------------------- | ---------------------- |
+| Communication style  | Method/function calls | Resource-oriented APIs |
+| Example              | `getUser(123)`        | `GET /users/123`       |
+| Payload              | Usually binary        | Usually JSON           |
+| Performance          | High                  | Moderate               |
+| Type safety          | Strong                | Often weaker           |
+| Human readability    | Lower                 | Higher                 |
+| Browser friendliness | Limited               | Excellent              |
+
+---
+
+# When to use RPC
+
+RPC is a good choice for:
+
+- Internal microservice communication
+- Low-latency systems
+- High-throughput services
+- Strongly typed APIs
+- Polyglot environments where multiple programming languages interact
+
+REST is often preferred for:
+
+- Public APIs
+- Browser-based clients
+- APIs that benefit from HTTP semantics and caching
+- Simpler integrations
+
+---
+
+# Design considerations
+
+Even though RPC feels like a local call, it's still a **network call**, so you must account for:
+
+- Network latency
+- Timeouts
+- Retries
+- Partial failures
+- Idempotency for retried operations
+- Circuit breakers
+- Load balancing
+
+A common interview point is:
+
+> **Never treat an RPC like an in-process function call. Network failures are inevitable and must be handled explicitly.**
+
+---
+
+# Trade-offs
+
+| Advantages                 | Disadvantages                                     |
+| -------------------------- | ------------------------------------------------- |
+| Simple programming model   | Can hide network complexity from developers       |
+| High performance           | Harder to debug than plain HTTP                   |
+| Strong typing              | Less human-readable                               |
+| Efficient binary protocols | Browser support may require additional proxies    |
+| Automatic code generation  | Tighter coupling through shared service contracts |
+
+---
+
+# Interview-ready summary
+
+> "RPC allows one service to invoke a method on another machine as though it were a local function call. The RPC framework handles serialization, transport, request routing, and response deserialization. Frameworks like gRPC use Protocol Buffers and HTTP/2 to provide efficient, strongly typed communication, making RPC a popular choice for internal microservice communication where performance and type safety are important."
+
 ## Question 4. What is the API Gateway pattern?
 
 ## Question 5. What is the difference between synchronous API calls and asynchronous events?

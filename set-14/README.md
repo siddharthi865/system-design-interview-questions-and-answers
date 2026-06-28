@@ -620,6 +620,323 @@ Current State
 
 ## Question 3. What is data reconciliation?
 
+# Data Reconciliation in Distributed Systems
+
+## Direct answer
+
+**Data reconciliation** is the process of detecting and resolving differences between multiple copies of data so that all replicas eventually become consistent.
+
+It is commonly used in distributed systems where temporary inconsistencies can occur due to network failures, replication delays, node crashes, or concurrent updates.
+
+---
+
+## Why is data reconciliation needed?
+
+In a distributed system, data is often replicated across multiple nodes.
+
+Example:
+
+```text
+        User updates profile
+               │
+               ▼
+          Primary Database
+          Name = "Alice"
+
+        /                 \
+       /                   \
+Replica A              Replica B
+Name = Alice          Name = Alicia
+```
+
+Because of replication delay or a network partition, replicas can temporarily hold different values.
+
+**Data reconciliation** identifies these differences and synchronizes the replicas.
+
+---
+
+## Common causes of inconsistency
+
+- Network partitions
+- Replication lag
+- Node failures
+- Concurrent writes
+- Lost or duplicated messages
+- Software bugs
+- Clock synchronization issues
+
+---
+
+## How data reconciliation works
+
+A typical reconciliation process involves four steps:
+
+### 1. Detect differences
+
+Compare data across replicas using techniques such as:
+
+- Checksums
+- Hashes
+- Version numbers
+- Timestamps
+- Merkle Trees
+
+Example:
+
+```text
+Replica A
+
+User 101
+Balance = ₹500
+
+Replica B
+
+User 101
+Balance = ₹700
+```
+
+The mismatch is detected.
+
+---
+
+### 2. Identify the correct version
+
+The system determines which copy should be considered authoritative.
+
+Possible strategies include:
+
+- Latest timestamp (Last Write Wins)
+- Highest version number
+- Leader's copy
+- Consensus protocol
+- Business rules
+- Manual review (for financial systems)
+
+---
+
+### 3. Resolve conflicts
+
+Common conflict resolution methods:
+
+#### Last Write Wins (LWW)
+
+The newest update replaces older ones.
+
+```text
+10:01 Alice
+
+10:05 Alicia
+
+Result:
+Alicia
+```
+
+**Pros:** Simple and fast.
+
+**Cons:** Can lose valid updates.
+
+---
+
+#### Version-based reconciliation
+
+Each update increments a version.
+
+```text
+Replica A
+
+Version 8
+
+Replica B
+
+Version 10
+
+Result:
+Version 10 wins
+```
+
+---
+
+#### Merge changes
+
+Combine updates instead of overwriting.
+
+Example:
+
+```text
+Replica A
+Phone updated
+
+Replica B
+Address updated
+```
+
+Result:
+
+```text
+Phone updated
+Address updated
+```
+
+Both changes are preserved.
+
+---
+
+#### Application-specific rules
+
+For example, in banking:
+
+```text
+Deposit ₹100
+
+Withdraw ₹50
+```
+
+Both operations are applied instead of selecting one winner.
+
+---
+
+### 4. Synchronize replicas
+
+After resolving conflicts, the correct data is propagated to all replicas.
+
+```text
+Before
+
+Replica A = 500
+
+Replica B = 700
+
+↓
+
+Reconciliation
+
+↓
+
+Replica A = 700
+
+Replica B = 700
+```
+
+---
+
+## Techniques used for reconciliation
+
+### 1. Checksums
+
+Each node computes a checksum for its data.
+
+```text
+Replica A
+
+Checksum = 8F21
+
+Replica B
+
+Checksum = 8F21
+```
+
+If checksums match, the data is likely identical.
+
+---
+
+### 2. Merkle Trees
+
+Instead of comparing the entire dataset, compare hashes in a tree structure.
+
+```text
+          Root Hash
+         /         \
+     Hash1       Hash2
+     /   \        /   \
+   D1    D2     D3    D4
+```
+
+Only branches with mismatched hashes need further comparison, making reconciliation efficient for large datasets.
+
+---
+
+### 3. Version vectors (Vector Clocks)
+
+Track updates from multiple replicas.
+
+Example:
+
+```text
+Replica A
+
+[A:5, B:2]
+
+Replica B
+
+[A:5, B:4]
+```
+
+Vector clocks help determine whether one version supersedes another or if updates occurred concurrently.
+
+---
+
+### 4. Anti-entropy protocols
+
+Replicas periodically exchange data to repair inconsistencies.
+
+```text
+Replica A
+      ⇄
+Replica B
+      ⇄
+Replica C
+```
+
+Over time, all replicas converge to the same state.
+
+---
+
+## Real-world examples
+
+- Apache Cassandra uses anti-entropy repair and Merkle Trees to reconcile replica differences.
+- Amazon DynamoDB uses versioning and conflict resolution to handle replicated data.
+- Apache Kafka consumers can reconcile state by replaying event logs after failures.
+- Distributed file systems reconcile metadata and file blocks after node recovery.
+
+---
+
+## Data reconciliation vs Data replication
+
+| Data Replication                | Data Reconciliation                 |
+| ------------------------------- | ----------------------------------- |
+| Copies data to replicas         | Detects and fixes inconsistencies   |
+| Happens during normal writes    | Happens after inconsistencies occur |
+| Focuses on distributing updates | Focuses on repairing divergent data |
+| Continuous process              | Periodic or event-triggered process |
+
+---
+
+## Data reconciliation vs Checkpointing
+
+| Data Reconciliation           | Checkpointing                                                     |
+| ----------------------------- | ----------------------------------------------------------------- |
+| Synchronizes replicas         | Saves application state                                           |
+| Repairs inconsistent data     | Enables crash recovery                                            |
+| Works across multiple nodes   | Usually concerns a single application or coordinated global state |
+| Supports eventual consistency | Supports fault tolerance and restart                              |
+
+---
+
+## Trade-offs
+
+| Advantages                    | Disadvantages                                  |
+| ----------------------------- | ---------------------------------------------- |
+| Restores consistency          | Consumes network and CPU resources             |
+| Repairs missed updates        | Can be expensive for very large datasets       |
+| Supports eventual consistency | Conflict resolution can be complex             |
+| Improves system reliability   | Poor conflict resolution may lead to data loss |
+
+---
+
+## Interview-ready summary
+
+> **Data reconciliation is the process of detecting and resolving inconsistencies between replicated copies of data in a distributed system. Differences can arise due to replication lag, network partitions, or node failures. Reconciliation typically involves detecting mismatches (using checksums, hashes, or Merkle Trees), resolving conflicts (using timestamps, version numbers, vector clocks, or application-specific rules), and synchronizing replicas. Systems like Apache Cassandra use anti-entropy repair with Merkle Trees to efficiently reconcile data while maintaining eventual consistency.**
+
 ## Question 4. How do you detect failures in distributed systems?
 
 ## Question 5. What is a watchdog timer in reliability?

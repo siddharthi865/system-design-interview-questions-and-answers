@@ -738,6 +738,217 @@ Secure inter-datacenter communication is implemented using a **defense-in-depth 
 
 ## Question 4. What is role-based access control (RBAC)?
 
+## Direct answer
+
+**Role-Based Access Control (RBAC)** is an authorization model where **access permissions are assigned to roles, and users are assigned to those roles**. Instead of giving permissions directly to users, you define roles (like _Admin_, _Developer_, _Viewer_) and map them to allowed actions.
+
+So the rule is:
+
+> **User → Role → Permissions → Resources**
+
+---
+
+## Requirements / problem framing
+
+In large systems, we need a scalable way to control:
+
+- Who can access what resource
+- What actions they can perform (read, write, delete, etc.)
+- How to manage permissions without assigning them individually per user
+
+Direct user-permission mapping does not scale, so RBAC solves this by introducing abstraction via roles.
+
+---
+
+## Core concept
+
+### Key entities
+
+- **User**: actual identity (Alice, Bob, service account)
+- **Role**: collection of permissions (Admin, Editor, Viewer)
+- **Permission**: action on a resource (e.g., `read:invoice`, `delete:user`)
+- **Resource**: system object (DB record, API, file, service)
+
+---
+
+### Simple mapping
+
+```
+User ───> Role ───> Permissions ───> Resources
+```
+
+Example:
+
+- Alice → Admin → [create_user, delete_user, read_all_data]
+- Bob → Viewer → [read_reports]
+
+---
+
+## High-level architecture
+
+```id="rbac_arch"
+        +----------------------+
+        |      Auth System     |
+        | (Login / Identity)   |
+        +----------+-----------+
+                   |
+                   v
+        +----------------------+
+        |   RBAC Engine       |
+        | (Policy Evaluation) |
+        +----------+-----------+
+                   |
+     +-------------+-------------+
+     |                           |
+     v                           v
++-----------+             +----------------+
+| User DB   |             | Role/Policy DB |
++-----------+             +----------------+
+```
+
+---
+
+## How RBAC works (step-by-step)
+
+### 1. User logs in
+
+- System authenticates user (password, OAuth, etc.)
+
+### 2. Fetch roles
+
+- System retrieves roles assigned to the user
+
+### 3. Resolve permissions
+
+- Roles are mapped to permissions
+
+### 4. Authorization check
+
+- On each request:
+  - Check if role allows the requested action on resource
+
+---
+
+### Example flow
+
+User: `Bob`
+
+- Role: `Viewer`
+- Permission: `read:dashboard`
+
+Request:
+
+```
+GET /admin/dashboard
+```
+
+RBAC engine:
+
+- Does Viewer have `read:dashboard`? → YES → allow
+- Does Viewer have `delete:user`? → NO → deny
+
+---
+
+## Deep design considerations
+
+### 1. Role hierarchy (optional enhancement)
+
+Roles can inherit permissions:
+
+```
+Admin
+  ↑
+Manager
+  ↑
+Viewer
+```
+
+- Admin inherits Manager + Viewer permissions
+- Reduces duplication
+
+---
+
+### 2. RBAC vs ACL vs ABAC
+
+| Model                                 | Concept                                            | Pros             | Cons                    |
+| ------------------------------------- | -------------------------------------------------- | ---------------- | ----------------------- |
+| RBAC                                  | Role-based permissions                             | Simple, scalable | Not fine-grained        |
+| ACL (Access Control List)             | Per-user permissions per resource                  | Very granular    | Hard to manage at scale |
+| ABAC (Attribute-Based Access Control) | Rules based on attributes (time, location, device) | Highly flexible  | Complex                 |
+
+---
+
+### 3. Fine-grained RBAC (common in real systems)
+
+Instead of just “role = admin”, modern systems use:
+
+```
+permission = resource + action
+```
+
+Examples:
+
+- `invoice:read`
+- `invoice:write`
+- `user:delete`
+
+---
+
+### 4. Multi-tenant RBAC
+
+In SaaS systems:
+
+- Roles are scoped per tenant
+- Same user can have different roles in different organizations
+
+Example:
+
+- Alice = Admin in Org A
+- Alice = Viewer in Org B
+
+---
+
+### 5. Caching for performance
+
+RBAC checks happen on every request, so:
+
+- Cache user → roles → permissions mapping
+- Use JWT claims for stateless authorization (with caveats)
+
+---
+
+### 6. Security considerations
+
+- Principle of least privilege (only required permissions)
+- Avoid role explosion (too many roles becomes unmanageable)
+- Regular role audits
+- Strong separation between admin role management and application logic
+
+---
+
+## Trade-offs
+
+| Approach | Pros                             | Cons                                |
+| -------- | -------------------------------- | ----------------------------------- |
+| RBAC     | Simple, scalable, widely adopted | Not flexible for dynamic conditions |
+| ACL      | Precise control                  | Hard to maintain at scale           |
+| ABAC     | Very flexible (context-aware)    | Complex policy evaluation           |
+
+---
+
+## Real-world usage examples
+
+- AWS IAM roles (RBAC + policy hybrid)
+- Kubernetes RBAC (cluster, namespace roles)
+- Enterprise SaaS admin dashboards
+- Internal microservices authorization
+
+---
+
+## Interview-ready summary
+
+Role-Based Access Control (RBAC) is an authorization model where **permissions are assigned to roles, and users inherit permissions through those roles**. It simplifies access management by decoupling users from direct permission assignments, making it highly scalable for enterprise systems. While RBAC is simple and widely used, modern systems often extend it with hierarchical roles or combine it with ABAC for more fine-grained, context-aware access control.
+
 ## Question 5. How do you design an attribute-based access control system (ABAC)?
 
 ## Question 6. How do you prevent data leaks in system logs?

@@ -853,6 +853,243 @@ A well-designed data warehouse typically includes:
 
 ## Question 4. What is a distributed transaction?
 
+# Distributed Transaction
+
+## Direct answer
+
+A **distributed transaction** is a transaction that spans **multiple independent systems** (such as databases, microservices, or data centers) and must maintain the **ACID** properties across all of them.
+
+The main challenge is ensuring that **either all participating systems commit the transaction or all roll it back**, even in the presence of failures.
+
+---
+
+## Why are distributed transactions needed?
+
+In a monolithic application, a single database transaction is straightforward:
+
+```text
+Application
+     │
+     ▼
+Single Database
+     │
+BEGIN
+UPDATE A
+UPDATE B
+COMMIT
+```
+
+The database guarantees atomicity.
+
+In a distributed system:
+
+```text
+Order Service ─────► Orders DB
+      │
+      ├────────────► Payment Service ─► Payments DB
+      │
+      └────────────► Inventory Service ─► Inventory DB
+```
+
+A single business operation now involves multiple services and databases. If one succeeds and another fails, the system can become inconsistent unless coordination is used.
+
+---
+
+## Example
+
+Consider placing an order on an e-commerce platform:
+
+1. Create the order.
+2. Charge the customer's credit card.
+3. Reserve inventory.
+4. Schedule shipping.
+
+Desired outcome:
+
+```text
+✓ Order created
+✓ Payment charged
+✓ Inventory reserved
+✓ Shipping scheduled
+```
+
+Failure scenario:
+
+```text
+✓ Payment charged
+✓ Order created
+✗ Inventory reservation failed
+```
+
+Without coordination, the customer is charged for an order that cannot be fulfilled.
+
+---
+
+## Common approaches
+
+### 1. Two-Phase Commit (2PC)
+
+A coordinator manages the transaction in two phases.
+
+#### Phase 1: Prepare
+
+```text
+Coordinator
+     │
+     ├──► Payment: Prepare?
+     ├──► Inventory: Prepare?
+     └──► Order: Prepare?
+```
+
+Each participant:
+
+- Executes the operation without committing.
+- Writes enough information to recover.
+- Replies **YES** or **NO**.
+
+#### Phase 2: Commit or Abort
+
+If everyone votes YES:
+
+```text
+Coordinator
+     │
+     ├──► Commit Payment
+     ├──► Commit Inventory
+     └──► Commit Order
+```
+
+If any participant votes NO:
+
+```text
+Coordinator
+     │
+     ├──► Rollback Payment
+     ├──► Rollback Inventory
+     └──► Rollback Order
+```
+
+### Advantages
+
+- Strong consistency.
+- Guarantees atomicity across participants.
+
+### Disadvantages
+
+- Coordinator can become a bottleneck.
+- Participants may remain blocked while waiting for the coordinator.
+- Increased latency due to multiple network round trips.
+- Doesn't scale well in highly distributed microservice architectures.
+
+---
+
+### 2. Saga Pattern
+
+Instead of one global transaction, a business workflow is split into **local transactions**.
+
+Each service:
+
+1. Commits its own transaction.
+2. Publishes an event.
+3. If a later step fails, previously completed steps execute **compensating transactions**.
+
+Example:
+
+```text
+Create Order
+      │
+      ▼
+Charge Payment
+      │
+      ▼
+Reserve Inventory
+      │
+      ▼
+Ship Order
+```
+
+If inventory reservation fails:
+
+```text
+Refund Payment
+Cancel Order
+```
+
+### Advantages
+
+- High scalability.
+- No blocking coordinator.
+- Well suited for microservices.
+- Better availability.
+
+### Disadvantages
+
+- Temporary inconsistency is possible.
+- Requires carefully designed compensation logic.
+- More complex business workflows.
+
+---
+
+## 2PC vs Saga
+
+| Feature          | Two-Phase Commit                  | Saga          |
+| ---------------- | --------------------------------- | ------------- |
+| Consistency      | Strong                            | Eventual      |
+| Blocking         | Yes                               | No            |
+| Scalability      | Moderate                          | High          |
+| Latency          | Higher                            | Lower         |
+| Failure handling | Rollback                          | Compensation  |
+| Best for         | Traditional distributed databases | Microservices |
+
+---
+
+## Design considerations
+
+When designing distributed transactions, consider:
+
+- **Idempotency:** Retrying a request should not create duplicate effects.
+- **Timeouts:** Handle participants that become slow or unavailable.
+- **Retries:** Use exponential backoff for transient failures.
+- **Dead-letter queues:** Capture events that repeatedly fail.
+- **Correlation IDs:** Track a transaction across services for debugging.
+- **Monitoring and tracing:** Observe the end-to-end transaction lifecycle.
+
+---
+
+## Trade-offs
+
+| Strong consistency (2PC)           | Eventual consistency (Saga)         |
+| ---------------------------------- | ----------------------------------- |
+| Guarantees all-or-nothing behavior | Better availability and scalability |
+| Higher latency                     | Faster local commits                |
+| Blocking during failures           | No global locks                     |
+| Simpler recovery semantics         | Requires compensation logic         |
+
+In modern cloud-native systems, the trade-off often favors **availability and scalability**, making the Saga pattern more common than distributed locking protocols.
+
+---
+
+## Real-world examples
+
+### Use distributed transactions (or equivalent coordination) for:
+
+- Bank fund transfers
+- Financial ledger updates
+- Airline seat booking with strict consistency requirements
+
+### Prefer Saga for:
+
+- E-commerce order processing
+- Food delivery workflows
+- Ride-sharing trip lifecycle
+- Hotel reservation systems
+
+---
+
+## Interview-ready summary
+
+> A **distributed transaction** coordinates a single business operation across multiple databases or services while preserving consistency. The traditional solution is **Two-Phase Commit (2PC)**, which provides strong consistency but introduces blocking and scalability challenges. Modern microservice architectures typically prefer the **Saga pattern**, where each service performs a local transaction and failures are handled through compensating actions. This sacrifices immediate consistency for better scalability, availability, and fault tolerance, making Saga the more common choice in large-scale distributed systems.
+
 ## Question 5. Explain the concept of ACID in databases
 
 ## Question 6. What is BASE in NoSQL systems?

@@ -1251,6 +1251,246 @@ Examples:
 
 ## Question 4. What is sticky session in load balancing?
 
+# Direct answer
+
+A **sticky session** (also called **session affinity**) is a load balancing technique where **all requests from the same user are consistently routed to the same backend server** for the duration of a session.
+
+It is commonly used when application servers store **session state in memory** instead of using a shared session store.
+
+---
+
+# Why are sticky sessions needed?
+
+Consider an application with three servers:
+
+```text
+                Load Balancer
+                      │
+        ┌─────────────┼─────────────┐
+        ▼             ▼             ▼
+    Server A      Server B      Server C
+```
+
+A user logs in, and **Server A** stores the user's session in memory:
+
+```text
+Session ID: ABC123
+Stored on: Server A
+```
+
+If the next request is routed to **Server B**, it won't find the session.
+
+```text
+Request → Server B
+
+Session ABC123?
+
+❌ Not Found
+```
+
+The user may appear logged out or receive an authentication error.
+
+With sticky sessions:
+
+```text
+User
+
+↓
+
+Load Balancer
+
+↓
+
+Always Server A
+```
+
+All requests continue to reach the server that holds the session.
+
+---
+
+# How sticky sessions work
+
+### Option 1: Cookie-based affinity (most common)
+
+The load balancer sets a cookie identifying the backend server.
+
+```text
+Set-Cookie:
+
+SERVER=serverA
+```
+
+Subsequent requests include:
+
+```text
+Cookie:
+
+SERVER=serverA
+```
+
+The load balancer reads the cookie and routes the request to **Server A**.
+
+---
+
+### Option 2: Source IP affinity
+
+The load balancer hashes the client's IP address.
+
+```text
+Hash(Client IP)
+
+↓
+
+Server B
+```
+
+All requests from that IP go to the same server.
+
+**Limitation:** Many users behind the same NAT or proxy may share an IP, leading to uneven load.
+
+---
+
+### Option 3: Session ID hashing
+
+The load balancer hashes an application session identifier (or another token) and consistently maps it to a backend server.
+
+---
+
+# Example flow
+
+Without sticky sessions:
+
+```text
+Request 1 → Server A → Login Success
+
+Request 2 → Server C → Session Missing
+
+Request 3 → Server B → Session Missing
+```
+
+With sticky sessions:
+
+```text
+Request 1 → Server A
+
+Request 2 → Server A
+
+Request 3 → Server A
+```
+
+---
+
+# Advantages
+
+- Simple to implement.
+- No need for a centralized session database.
+- Low latency because session data is local.
+- Useful for legacy applications with in-memory sessions.
+
+---
+
+# Disadvantages
+
+## 1. Uneven load distribution
+
+Some servers may become overloaded while others remain underutilized.
+
+```text
+Server A : 5,000 users
+
+Server B : 300 users
+
+Server C : 500 users
+```
+
+---
+
+## 2. Poor fault tolerance
+
+If **Server A** crashes:
+
+```text
+Session
+
+↓
+
+Lost
+```
+
+Users routed to that server must log in again unless sessions are replicated or stored externally.
+
+---
+
+## 3. Difficult auto-scaling
+
+Adding new servers doesn't automatically rebalance existing sticky sessions, so new instances may receive little traffic initially.
+
+---
+
+## 4. Reduced flexibility
+
+The load balancer cannot freely distribute each request to the least-loaded healthy server because it must honor the affinity.
+
+---
+
+# Better approach: Shared session storage
+
+Instead of storing sessions in application memory:
+
+```text
+          Load Balancer
+                │
+      ┌─────────┼─────────┐
+      ▼         ▼         ▼
+   Server A  Server B  Server C
+        \       |       /
+         \      |      /
+          ▼     ▼     ▼
+      Shared Session Store
+        (e.g., Redis)
+```
+
+Now:
+
+- Any server can handle any request.
+- Servers are stateless.
+- Scaling and failover become much easier.
+
+---
+
+# Sticky sessions vs Stateless applications
+
+| Sticky Sessions               | Stateless Applications                                   |
+| ----------------------------- | -------------------------------------------------------- |
+| Session stored on server      | Session stored externally or encoded in token            |
+| Requires session affinity     | Any server can handle any request                        |
+| Harder to scale               | Easy horizontal scaling                                  |
+| Weaker fault tolerance        | Better resilience                                        |
+| Common in older architectures | Preferred in cloud-native and microservice architectures |
+
+---
+
+# When should you use sticky sessions?
+
+**Good choice when:**
+
+- Supporting legacy applications with in-memory sessions.
+- Migrating an older system where redesigning session management isn't feasible.
+- Short-term compatibility is more important than scalability.
+
+**Avoid when:**
+
+- Building modern microservices.
+- Running in Kubernetes or cloud environments.
+- Expecting frequent auto-scaling or failover.
+- Designing highly available, stateless services.
+
+---
+
+# Interview-ready summary
+
+> **A sticky session, or session affinity, ensures that all requests from a user are routed to the same backend server. It's useful when session data is stored in the server's memory, preventing session loss across requests. However, sticky sessions can cause uneven load distribution, complicate auto-scaling, and reduce fault tolerance because a server failure can invalidate user sessions. In modern distributed systems, the preferred approach is to keep application servers stateless by storing session data in a shared store like Redis or by using signed tokens (such as JWTs), allowing any server to handle any request.**
+
 ## Question 5. How do you design a system with WebRTC support?
 
 ## Question 6. What is multicast vs unicast vs broadcast?

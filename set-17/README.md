@@ -1388,6 +1388,439 @@ Use:
 
 ## Question 4. How do you design a micro-billing system for pay-per-use services?
 
+# Design a Micro-Billing System for Pay-per-Use Services (LLD)
+
+## Direct answer
+
+A micro-billing system records every billable usage event (API calls, storage, compute time, messages, etc.), calculates charges based on configurable pricing rules, maintains customer balances or invoices, and processes payments.
+
+At the class diagram level, the design should separate:
+
+- **Usage recording**
+- **Pricing calculation**
+- **Billing**
+- **Invoice generation**
+- **Payment processing**
+
+This keeps pricing logic independent of billing and allows new pricing models to be added without changing the core system.
+
+---
+
+# Requirements / Problem Framing
+
+## Functional Requirements
+
+- Record usage events
+- Support multiple pricing models
+- Calculate charges
+- Generate invoices
+- Process payments
+- Handle refunds and billing adjustments
+- View billing history
+
+## Non-functional Requirements
+
+- High accuracy (financial data)
+- Idempotent event processing
+- Auditability
+- Scalability for millions of usage events
+- Strong consistency for invoice generation and payments
+
+---
+
+# Core Class Diagram
+
+```text
+                    +------------------+
+                    | BillingService   |
+                    +------------------+
+                    | pricingStrategy  |
+                    | usageRepo        |
+                    | invoiceRepo      |
+                    +------------------+
+                    | recordUsage()    |
+                    | generateInvoice()|
+                    | processPayment() |
+                    +--------+---------+
+                             |
+          ----------------------------------------
+          |                    |                 |
+     UsageEvent         PricingStrategy      Invoice
+                              |
+               ----------------------------------
+               |                |               |
+         FlatRateStrategy  TieredStrategy  SubscriptionStrategy
+
+                             |
+                        PaymentService
+                             |
+                         PaymentGateway
+
+```
+
+---
+
+# Main Classes
+
+## Customer
+
+```javascript
+class Customer {
+  constructor(id, name) {
+    this.id = id;
+    this.name = name;
+  }
+}
+```
+
+---
+
+## UsageEvent
+
+Every billable action creates an immutable usage record.
+
+```javascript
+class UsageEvent {
+  constructor(id, customerId, service, quantity, timestamp) {
+    this.id = id;
+    this.customerId = customerId;
+    this.service = service;
+    this.quantity = quantity;
+    this.timestamp = timestamp;
+  }
+}
+```
+
+Examples:
+
+- API request
+- GB stored
+- Minutes streamed
+- Compute seconds
+- SMS sent
+
+---
+
+## Pricing Strategy
+
+Pricing logic is encapsulated using the **Strategy Pattern**.
+
+```javascript
+class PricingStrategy {
+  calculate(event) {
+    throw new Error("Implement");
+  }
+}
+```
+
+---
+
+### Flat Rate Pricing
+
+```javascript
+class FlatRateStrategy extends PricingStrategy {
+  calculate(event) {
+    return event.quantity * 0.05;
+  }
+}
+```
+
+Example:
+
+```text
+100 API calls
+× ₹0.05
+= ₹5
+```
+
+---
+
+### Tiered Pricing
+
+```javascript
+class TieredStrategy extends PricingStrategy {
+  calculate(event) {
+    if (event.quantity <= 1000) {
+      return event.quantity * 0.1;
+    }
+
+    return 1000 * 0.1 + (event.quantity - 1000) * 0.08;
+  }
+}
+```
+
+---
+
+### Subscription Pricing
+
+```javascript
+class SubscriptionStrategy extends PricingStrategy {
+  calculate(event) {
+    return 0;
+  }
+}
+```
+
+Usage is covered by a monthly subscription.
+
+---
+
+# Charge
+
+Represents the calculated cost for a usage event.
+
+```javascript
+class Charge {
+  constructor(eventId, amount) {
+    this.eventId = eventId;
+    this.amount = amount;
+  }
+}
+```
+
+---
+
+# Invoice
+
+Aggregates multiple charges.
+
+```javascript
+class Invoice {
+  constructor(id, customerId) {
+    this.id = id;
+    this.customerId = customerId;
+    this.charges = [];
+    this.status = "PENDING";
+  }
+
+  total() {
+    return this.charges.reduce((sum, c) => sum + c.amount, 0);
+  }
+}
+```
+
+---
+
+# Payment
+
+```javascript
+class Payment {
+  constructor(id, invoiceId, amount, status) {
+    this.id = id;
+    this.invoiceId = invoiceId;
+    this.amount = amount;
+    this.status = status;
+  }
+}
+```
+
+---
+
+# Payment Gateway
+
+```javascript
+class PaymentGateway {
+  charge(payment) {
+    throw new Error("Implement");
+  }
+}
+```
+
+Concrete implementations might integrate with providers like Stripe, Razorpay, or PayPal.
+
+---
+
+# Billing Service
+
+Coordinates the billing workflow.
+
+```javascript
+class BillingService {
+  constructor(strategy, repository, paymentGateway) {
+    this.strategy = strategy;
+    this.repository = repository;
+    this.paymentGateway = paymentGateway;
+  }
+
+  recordUsage(event) {
+    this.repository.saveUsage(event);
+  }
+
+  generateInvoice(customerId) {
+    const events = this.repository.getUsage(customerId);
+
+    const invoice = new Invoice(crypto.randomUUID(), customerId);
+
+    for (const event of events) {
+      const amount = this.strategy.calculate(event);
+      invoice.charges.push(new Charge(event.id, amount));
+    }
+
+    this.repository.saveInvoice(invoice);
+
+    return invoice;
+  }
+
+  processPayment(invoice) {
+    const payment = new Payment(
+      crypto.randomUUID(),
+      invoice.id,
+      invoice.total(),
+      "PENDING",
+    );
+
+    return this.paymentGateway.charge(payment);
+  }
+}
+```
+
+---
+
+# Repository Layer
+
+```javascript
+class BillingRepository {
+  saveUsage(event) {}
+
+  getUsage(customerId) {}
+
+  saveInvoice(invoice) {}
+
+  savePayment(payment) {}
+}
+```
+
+---
+
+# Sequence Flow
+
+### Usage Recording
+
+```text
+Client
+   |
+   | API Call
+   v
+BillingService
+   |
+   v
+Create UsageEvent
+   |
+   v
+Persist UsageEvent
+```
+
+---
+
+### Invoice Generation
+
+```text
+Scheduler
+      |
+      v
+BillingService
+      |
+      v
+Fetch UsageEvents
+      |
+      v
+PricingStrategy
+      |
+      v
+Create Charges
+      |
+      v
+Generate Invoice
+```
+
+---
+
+### Payment
+
+```text
+Invoice
+    |
+    v
+PaymentService
+    |
+    v
+PaymentGateway
+    |
+    v
+Payment Success
+```
+
+---
+
+# Design Considerations
+
+### Immutable Usage Events
+
+Never modify usage records after they are created.
+
+Instead of updating totals directly:
+
+```text
+API Calls = 500
+```
+
+Store individual events:
+
+```text
++1 API Call
++1 API Call
++5 API Calls
++10 API Calls
+```
+
+This enables:
+
+- Auditing
+- Rebilling
+- Fraud detection
+- Analytics
+
+---
+
+### Idempotency
+
+Usage events may be retried due to network failures.
+
+Each event should include a unique event ID, and duplicate IDs should be ignored to avoid double billing.
+
+---
+
+### Pricing Versioning
+
+Pricing rules change over time.
+
+Instead of updating historical invoices, associate each usage event or invoice with the pricing plan version used during calculation.
+
+---
+
+### Currency Handling
+
+Avoid floating-point arithmetic for money.
+
+Store amounts in the smallest currency unit (for example, paise or cents) using integers or fixed-precision decimal types.
+
+---
+
+# Design Patterns Used
+
+| Pattern       | Usage                                    |
+| ------------- | ---------------------------------------- |
+| Strategy      | Different pricing models                 |
+| Repository    | Data persistence abstraction             |
+| Service Layer | Billing orchestration                    |
+| Adapter       | Integrate with external payment gateways |
+
+---
+
+# Interview-ready Summary
+
+> "I'd design the micro-billing system around immutable `UsageEvent` records, with a `BillingService` orchestrating usage recording, charge calculation, invoice generation, and payment processing. Pricing logic would be encapsulated using the Strategy pattern to support flat-rate, tiered, subscription, or future pricing models. Usage events are converted into `Charge` objects and aggregated into `Invoice`s, while a `PaymentGateway` abstraction handles external payment providers. To ensure financial correctness, I'd make event processing idempotent, version pricing rules, use integer currency units, and maintain immutable usage and billing records for auditing and reconciliation."
+
 ## Question 5. How do you design a personal budgeting system?
 
 ## Question 6. How do you design a fitness class reservation system?

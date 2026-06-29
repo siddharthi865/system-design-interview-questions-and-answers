@@ -766,6 +766,426 @@ Scaling Strategy
 
 ## Question 4. Explain SOLID principles in system design
 
+## Direct Answer
+
+**SOLID** is a set of five object-oriented design principles that help create software that is:
+
+- Easy to maintain
+- Easy to extend
+- Loosely coupled
+- Testable
+- Scalable as requirements evolve
+
+The five principles are:
+
+| Principle | Full Form                       |
+| --------- | ------------------------------- |
+| S         | Single Responsibility Principle |
+| O         | Open/Closed Principle           |
+| L         | Liskov Substitution Principle   |
+| I         | Interface Segregation Principle |
+| D         | Dependency Inversion Principle  |
+
+In Low-Level Design interviews, SOLID principles are frequently used to evaluate code quality and design flexibility.
+
+---
+
+# 1. Single Responsibility Principle (SRP)
+
+### Definition
+
+A class should have **only one reason to change**.
+
+In other words:
+
+> One class = One responsibility.
+
+### Bad Design
+
+```javascript
+class UserService {
+  createUser() {
+    // create user
+  }
+
+  sendEmail() {
+    // send email
+  }
+
+  generateReport() {
+    // generate report
+  }
+}
+```
+
+Problems:
+
+- User management
+- Email handling
+- Reporting
+
+All mixed into one class.
+
+---
+
+### Better Design
+
+```javascript
+class UserService {
+  createUser() {}
+}
+
+class EmailService {
+  sendEmail() {}
+}
+
+class ReportService {
+  generateReport() {}
+}
+```
+
+Each class has a single responsibility.
+
+### Benefits
+
+- Easier maintenance
+- Better testing
+- Lower coupling
+
+---
+
+# 2. Open/Closed Principle (OCP)
+
+### Definition
+
+Software entities should be:
+
+> Open for extension, closed for modification.
+
+You should add new functionality without modifying existing code.
+
+---
+
+### Bad Design
+
+```javascript
+class PaymentProcessor {
+  process(type) {
+    if (type === "creditCard") {
+      // process card
+    } else if (type === "paypal") {
+      // process paypal
+    }
+  }
+}
+```
+
+Adding a new payment method requires changing existing code.
+
+---
+
+### Better Design
+
+```javascript
+class PaymentMethod {
+  pay() {}
+}
+
+class CreditCardPayment extends PaymentMethod {
+  pay() {}
+}
+
+class PayPalPayment extends PaymentMethod {
+  pay() {}
+}
+
+class UpiPayment extends PaymentMethod {
+  pay() {}
+}
+```
+
+```javascript
+class PaymentProcessor {
+  process(paymentMethod) {
+    paymentMethod.pay();
+  }
+}
+```
+
+New payment methods can be added without modifying `PaymentProcessor`.
+
+### Real-World Example
+
+- Payment gateways
+- Notification channels
+- Storage providers
+
+---
+
+# 3. Liskov Substitution Principle (LSP)
+
+### Definition
+
+Subclasses should be replaceable with their parent class without breaking behavior.
+
+---
+
+### Bad Example
+
+```javascript
+class Bird {
+  fly() {}
+}
+
+class Penguin extends Bird {
+  fly() {
+    throw new Error("Cannot fly");
+  }
+}
+```
+
+Problem:
+
+```javascript
+function makeBirdFly(bird) {
+  bird.fly();
+}
+```
+
+Passing a Penguin breaks the expectation.
+
+---
+
+### Better Design
+
+```javascript
+class Bird {}
+
+class FlyingBird extends Bird {
+  fly() {}
+}
+
+class Sparrow extends FlyingBird {}
+
+class Penguin extends Bird {}
+```
+
+Now substitution works correctly.
+
+### Interview Insight
+
+If a subclass violates assumptions made by the base class, LSP is broken.
+
+---
+
+# 4. Interface Segregation Principle (ISP)
+
+### Definition
+
+Clients should not depend on methods they do not use.
+
+Instead of one large interface, create smaller specialized interfaces.
+
+---
+
+### Bad Design
+
+```javascript
+class Worker {
+  work() {}
+  eat() {}
+}
+```
+
+Suppose a robot worker exists.
+
+```javascript
+class Robot extends Worker {
+  eat() {
+    throw new Error();
+  }
+}
+```
+
+Robot doesn't need `eat()`.
+
+---
+
+### Better Design
+
+```javascript
+class Workable {
+  work() {}
+}
+
+class Eatable {
+  eat() {}
+}
+```
+
+```javascript
+class HumanWorker extends Workable {
+  work() {}
+  eat() {}
+}
+
+class RobotWorker extends Workable {
+  work() {}
+}
+```
+
+### Benefits
+
+- Cleaner contracts
+- Less unused code
+- Easier maintenance
+
+---
+
+# 5. Dependency Inversion Principle (DIP)
+
+### Definition
+
+High-level modules should not depend on low-level modules.
+
+Both should depend on abstractions.
+
+---
+
+### Bad Design
+
+```javascript
+class MySQLDatabase {
+  save() {}
+}
+
+class UserService {
+  constructor() {
+    this.db = new MySQLDatabase();
+  }
+}
+```
+
+Problem:
+
+- UserService is tightly coupled to MySQL.
+
+Switching to PostgreSQL requires code changes.
+
+---
+
+### Better Design
+
+```javascript
+class Database {
+  save() {}
+}
+
+class MySQLDatabase extends Database {
+  save() {}
+}
+
+class PostgreSQLDatabase extends Database {
+  save() {}
+}
+```
+
+```javascript
+class UserService {
+  constructor(database) {
+    this.database = database;
+  }
+
+  createUser() {
+    this.database.save();
+  }
+}
+```
+
+Usage:
+
+```javascript
+const db = new PostgreSQLDatabase();
+const service = new UserService(db);
+```
+
+### Benefits
+
+- Easier testing
+- Easier swapping implementations
+- Better modularity
+
+---
+
+## Real System Design Examples
+
+### Notification System
+
+Instead of:
+
+```javascript
+if (type === "email") {
+}
+if (type === "sms") {
+}
+if (type === "push") {
+}
+```
+
+Use:
+
+```javascript
+NotificationChannel.send();
+```
+
+Implementations:
+
+- EmailChannel
+- SmsChannel
+- PushChannel
+
+This follows:
+
+- OCP
+- DIP
+
+---
+
+### Payment System
+
+```javascript
+PaymentMethod.pay();
+```
+
+Implementations:
+
+- CreditCardPayment
+- UPI
+- PayPal
+- Stripe
+
+Adding a new payment provider requires no changes to existing logic.
+
+---
+
+## Why SOLID Matters in Interviews
+
+Interviewers use SOLID principles to assess:
+
+- Code maintainability
+- Extensibility
+- Coupling and cohesion
+- OOP design skills
+- Long-term scalability of code
+
+A design that follows SOLID is usually easier to evolve when requirements change.
+
+---
+
+## Interview-Ready Summary
+
+> SOLID is a set of five object-oriented design principles that improve maintainability, flexibility, and scalability of software. SRP promotes a single responsibility per class, OCP enables extension without modification, LSP ensures subclasses can replace parent classes safely, ISP encourages small focused interfaces, and DIP reduces coupling by depending on abstractions rather than concrete implementations. Together, these principles lead to cleaner and more extensible system designs.
+
 ## Question 5. How do you design a parking lot system?
 
 ## Question 6. How do you design a library management system?

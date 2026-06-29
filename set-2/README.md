@@ -1106,6 +1106,369 @@ Client-server architecture is a model where clients request services and servers
 
 ## Question 4. Explain microservices architecture vs monolithic architecture
 
+## Direct answer
+
+The key difference is:
+
+- **Monolithic Architecture**: The entire application is built and deployed as a single unit.
+- **Microservices Architecture**: The application is split into multiple independent services, each responsible for a specific business capability and deployable independently.
+
+A monolith is usually simpler to build and operate initially, while microservices provide better scalability, fault isolation, and team autonomy for large, complex systems.
+
+---
+
+## Monolithic Architecture
+
+In a monolithic application, all components run within the same codebase and deployment unit.
+
+### Architecture
+
+```text
+                Monolithic Application
++--------------------------------------------------+
+| User Module | Order Module | Payment Module      |
+| Inventory   | Notification | Authentication      |
++--------------------------------------------------+
+                      |
+                  Database
+```
+
+### Characteristics
+
+- Single codebase
+- Single deployment artifact
+- Usually one database
+- All modules share the same runtime
+
+### Example Request Flow
+
+```text
+Client
+   |
+Monolith
+   |
+Database
+```
+
+A request for placing an order goes through the same application that handles users, payments, notifications, and inventory.
+
+---
+
+## Advantages of Monolithic Architecture
+
+### Simpler Development
+
+- Easy to understand initially
+- Fewer moving parts
+- Easier local development
+
+### Simpler Deployment
+
+```text
+Build → Deploy One Application
+```
+
+### Easier Debugging
+
+- Single process
+- No network calls between modules
+
+### Better Performance
+
+Internal function calls are faster than network communication.
+
+---
+
+## Challenges of Monolithic Architecture
+
+### Scaling Limitations
+
+If only the payment module is overloaded:
+
+```text
+Need to scale entire application
+```
+
+even though other modules may be underutilized.
+
+### Large Codebase
+
+Over time:
+
+```text
+100k LOC → 1M LOC → 10M LOC
+```
+
+Development becomes slower and riskier.
+
+### Slower Deployments
+
+A small change requires redeploying the entire application.
+
+### Reduced Fault Isolation
+
+A memory leak in one module can impact the whole system.
+
+---
+
+## Microservices Architecture
+
+Microservices split the application into independently deployable services.
+
+### Architecture
+
+```text
+                Clients
+                    |
+              API Gateway
+                    |
+      +------+------+------+------+
+      |             |             |
+ User Service   Order Service   Payment Service
+      |             |             |
+      +------+------+------+------+
+                    |
+              Event Queue
+                    |
+         Notification Service
+
+Each service owns its database.
+```
+
+---
+
+## Characteristics
+
+- Small, focused services
+- Independent deployment
+- Independent scaling
+- Often own their databases
+- Communicate via APIs or events
+
+Examples:
+
+- User Service
+- Order Service
+- Payment Service
+- Inventory Service
+- Notification Service
+
+---
+
+## Advantages of Microservices
+
+### Independent Scaling
+
+If Payment Service receives heavy traffic:
+
+```text
+Payment Service: 20 instances
+User Service: 5 instances
+```
+
+Scale only what needs scaling.
+
+---
+
+### Independent Deployment
+
+```text
+Deploy Payment Service
+```
+
+without redeploying the entire system.
+
+---
+
+### Better Fault Isolation
+
+If Notification Service fails:
+
+```text
+Orders still work
+Payments still work
+```
+
+assuming proper isolation.
+
+---
+
+### Team Independence
+
+Different teams can own different services.
+
+Example:
+
+| Team   | Service         |
+| ------ | --------------- |
+| Team A | User Service    |
+| Team B | Payment Service |
+| Team C | Order Service   |
+
+This is one reason companies like Amazon and Netflix adopted microservices.
+
+---
+
+## Challenges of Microservices
+
+### Distributed System Complexity
+
+Now every service communicates over the network.
+
+```text
+Service A → Service B → Service C
+```
+
+New challenges:
+
+- Timeouts
+- Retries
+- Network failures
+- Service discovery
+
+---
+
+### Data Consistency
+
+In a monolith:
+
+```text
+Single ACID transaction
+```
+
+In microservices:
+
+```text
+Order Service DB
+Payment Service DB
+Inventory Service DB
+```
+
+Distributed transactions become difficult.
+
+Patterns such as:
+
+- Saga
+- Event-driven architecture
+- Outbox pattern
+
+are commonly used.
+
+---
+
+### Observability Complexity
+
+Tracking a request becomes harder:
+
+```text
+Client
+  |
+Gateway
+  |
+Order Service
+  |
+Payment Service
+  |
+Inventory Service
+```
+
+Requires:
+
+- Distributed tracing
+- Centralized logging
+- Correlation IDs
+
+---
+
+### Operational Overhead
+
+Need to manage:
+
+- Service discovery
+- API gateways
+- CI/CD pipelines
+- Monitoring
+- Container orchestration
+
+Often with tools like:
+
+- Docker
+- Kubernetes
+- Service Mesh
+
+---
+
+## Comparison
+
+| Aspect               | Monolith          | Microservices             |
+| -------------------- | ----------------- | ------------------------- |
+| Codebase             | Single            | Multiple                  |
+| Deployment           | Single deployment | Independent deployments   |
+| Scaling              | Scale entire app  | Scale individual services |
+| Complexity           | Low initially     | High                      |
+| Development Speed    | Faster initially  | Better for large teams    |
+| Fault Isolation      | Weak              | Strong                    |
+| Data Management      | Usually one DB    | Multiple DBs              |
+| Operational Overhead | Low               | High                      |
+| Team Autonomy        | Limited           | High                      |
+
+---
+
+## When to Choose Monolith
+
+Use a monolith when:
+
+- Startup or early-stage product
+- Small engineering team
+- Requirements are evolving rapidly
+- Low to moderate traffic
+- Fast development is more important than scalability
+
+Example:
+
+- MVP
+- Internal tools
+- Small SaaS application
+
+---
+
+## When to Choose Microservices
+
+Use microservices when:
+
+- Large engineering organization
+- Multiple teams working independently
+- Different scaling requirements
+- Very high traffic
+- Need independent deployments
+
+Example:
+
+- E-commerce platforms
+- Ride-sharing systems
+- Streaming platforms
+- Large fintech systems
+
+---
+
+## Trade-off
+
+A common mistake is starting with microservices too early.
+
+Many successful companies began with a monolith and moved to microservices only after:
+
+- Traffic increased
+- Team size grew
+- Deployment bottlenecks appeared
+
+A well-structured monolith is often the right starting point, while microservices become valuable as organizational and scaling complexity grows.
+
+---
+
+## Interview-Ready Summary
+
+A monolithic architecture packages all business functionality into a single deployable application, making development and operations simpler initially. Microservices architecture decomposes the system into independently deployable services, enabling better scalability, fault isolation, and team autonomy. The trade-off is that microservices introduce distributed-system challenges such as service communication, data consistency, observability, and operational complexity. For most products, starting with a monolith and evolving toward microservices when scale and organizational needs justify it is a practical approach.
+
 ## Question 5. What is service discovery and how does it work?
 
 ## Question 6. How do you design an API rate limiter?

@@ -939,6 +939,252 @@ Over time, all replicas converge to the same state.
 
 ## Question 4. How do you detect failures in distributed systems?
 
+# How do you detect failures in distributed systems?
+
+## Direct answer
+
+Failure detection in distributed systems is typically done using **heartbeats**, **timeouts**, and **health checks**. Since there is no global clock or perfect way to distinguish a slow node from a failed one, distributed systems use **failure detectors** that provide the _best possible estimate_ of whether a node has failed.
+
+A node is generally considered failed if it stops responding within a configured timeout period.
+
+---
+
+## Why is failure detection challenging?
+
+Unlike a single machine, distributed systems cannot directly determine whether another node has crashed.
+
+If a node doesn't respond, it could be because:
+
+- The node crashed.
+- The network is partitioned.
+- The node is overloaded.
+- The response is delayed.
+- The message was lost.
+
+This uncertainty is known as the **partial failure problem**.
+
+---
+
+## Common failure detection techniques
+
+### 1. Heartbeats (Most common)
+
+Nodes periodically send small "I'm alive" messages.
+
+```text
+        Heartbeat
+Node A -----------> Node B
+        every 2 sec
+```
+
+If Node B stops receiving heartbeats for a configured interval:
+
+```text
+Node A
+
+Heartbeat ✓
+Heartbeat ✓
+Heartbeat ✗
+Heartbeat ✗
+
+↓
+
+Node B suspects Node A has failed.
+```
+
+**Pros**
+
+- Simple
+- Low overhead
+- Widely used
+
+**Cons**
+
+- Choosing the heartbeat interval is a trade-off between detection speed and false positives.
+
+---
+
+### 2. Timeout-based detection
+
+Each request has a timeout.
+
+```text
+Client
+   │
+Request
+   ▼
+Server
+
+Wait 5 sec
+
+↓
+
+No response
+
+↓
+
+Failure suspected
+```
+
+If the timeout expires, the requester assumes the node is unavailable.
+
+**Pros**
+
+- Easy to implement
+- Works well for RPC systems
+
+**Cons**
+
+- A slow server may be incorrectly marked as failed.
+
+---
+
+### 3. Health checks
+
+A monitoring service periodically checks whether a node is healthy.
+
+Checks may include:
+
+- Process running
+- CPU usage
+- Memory availability
+- Database connectivity
+- Disk health
+- Network connectivity
+
+Example:
+
+```text
+Load Balancer
+
+      │
+Health Check
+
+      ▼
+
+Server
+
+HTTP 200 OK
+```
+
+If health checks fail repeatedly, the node is removed from service.
+
+---
+
+### 4. Gossip protocol
+
+Nodes randomly exchange status information with each other.
+
+```text
+      A
+    / | \
+   B  C  D
+      |
+      E
+```
+
+If Node A detects that Node C has failed, it gossips that information to other nodes. Eventually, the entire cluster learns about the failure.
+
+**Pros**
+
+- Highly scalable
+- No central coordinator
+- Fault tolerant
+
+**Cons**
+
+- Failure information propagates gradually.
+
+Used in systems like Apache Cassandra and HashiCorp Consul.
+
+---
+
+### 5. Phi Accrual Failure Detector
+
+Instead of declaring a node simply "alive" or "dead," it computes a **suspicion level (φ)** based on heartbeat history.
+
+```text
+φ = 0.5  → Healthy
+
+φ = 3.2  → Possibly slow
+
+φ = 8.5  → Consider failed
+```
+
+Advantages:
+
+- Adapts to changing network conditions
+- Reduces false positives
+- Works well in cloud environments with variable latency
+
+Used by systems like Apache Cassandra and Akka.
+
+---
+
+## Active vs Passive failure detection
+
+| Active Detection          | Passive Detection               |
+| ------------------------- | ------------------------------- |
+| Periodically probes nodes | Waits for requests to fail      |
+| Faster detection          | Simpler implementation          |
+| Higher network overhead   | Lower overhead                  |
+| Common in clusters        | Common in client-server systems |
+
+---
+
+## What happens after detecting a failure?
+
+Once a node is suspected to have failed, the system may:
+
+1. Stop routing traffic to it.
+2. Elect a new leader (if needed).
+3. Fail over to replicas.
+4. Redistribute tasks.
+5. Recover data from replicas or logs.
+6. Restart the failed node when it comes back.
+
+Example:
+
+```text
+Leader crashes
+      │
+      ▼
+Failure detected
+      │
+      ▼
+Leader election
+      │
+      ▼
+New leader starts serving requests
+```
+
+---
+
+## Trade-offs
+
+| Faster Detection                   | Slower Detection             |
+| ---------------------------------- | ---------------------------- |
+| Faster recovery                    | Fewer false positives        |
+| Higher network overhead            | Longer failover time         |
+| More sensitive to temporary delays | Better for unstable networks |
+
+Choosing heartbeat intervals and timeout values requires balancing detection speed against the risk of incorrectly suspecting healthy nodes.
+
+---
+
+## Real-world examples
+
+- Kubernetes uses liveness and readiness probes to determine pod health and restart or remove unhealthy instances.
+- Apache ZooKeeper uses session timeouts and heartbeats to detect client and server failures.
+- etcd uses periodic heartbeats within the Raft consensus protocol to detect leader failures.
+- Apache Cassandra combines gossip with the Phi Accrual Failure Detector for scalable, adaptive failure detection.
+
+---
+
+## Interview-ready summary
+
+> **Distributed systems cannot distinguish a crashed node from a slow or partitioned one with certainty, so they rely on failure detectors based on heartbeats, timeouts, health checks, gossip protocols, or adaptive mechanisms like the Phi Accrual Failure Detector. These detectors provide a suspicion of failure rather than absolute certainty. Once a failure is detected, the system can trigger actions such as removing the node from service, electing a new leader, failing over to replicas, or redistributing work, ensuring high availability and fault tolerance.**
+
 ## Question 5. What is a watchdog timer in reliability?
 
 ## Question 6. How do you handle phantom reads in transactions?

@@ -927,6 +927,383 @@ Choose **Active-Passive** when:
 
 ## Question 4. How do you design a failover mechanism?
 
+# How do you design a failover mechanism?
+
+## Direct answer
+
+A **failover mechanism** ensures that when a server, service, or entire region fails, traffic is automatically redirected to a healthy instance with minimal downtime and data loss.
+
+A robust failover design typically includes:
+
+- **Health checks** to detect failures
+- **Redundant instances** (Active-Active or Active-Passive)
+- **Automatic failover logic**
+- **State replication**
+- **Traffic rerouting** via a load balancer or DNS
+- **Recovery and failback** procedures
+
+The exact implementation depends on your availability and consistency requirements (e.g., RTO/RPO targets).
+
+---
+
+# Requirements / Problem Framing
+
+### Functional Requirements
+
+- Detect unhealthy instances
+- Redirect traffic automatically
+- Recover failed instances safely
+- Avoid routing requests to unhealthy nodes
+
+### Non-Functional Requirements
+
+- High availability (e.g., 99.99%+)
+- Low failover time
+- No single point of failure
+- Minimal data loss
+- Prevent split-brain scenarios
+
+---
+
+# High-Level Architecture
+
+```text
+                Clients
+                    |
+            Global DNS / GSLB
+                    |
+          -----------------------
+          |                     |
+     Region A              Region B
+      Active                 Standby
+          |
+     Load Balancer
+      /    |     \
+ App1    App2   App3
+          |
+   Health Monitoring
+          |
+ Leader Election / Failover
+          |
+ Replicated Database
+```
+
+---
+
+# Components
+
+### 1. Health Checks
+
+Continuously monitor service health.
+
+Checks may include:
+
+- HTTP `/health` endpoint
+- TCP connectivity
+- Database connectivity
+- Dependency availability
+- CPU/Memory thresholds
+
+Example:
+
+```text
+Every 5 seconds
+
+LB → Server A → 200 OK ✅
+LB → Server B → Timeout ❌
+LB → Server C → 200 OK ✅
+```
+
+After a configurable number of consecutive failures, the instance is marked unhealthy.
+
+---
+
+### 2. Load Balancer
+
+The load balancer sends traffic only to healthy instances.
+
+```text
+Healthy:
+A
+B
+C
+
+↓
+
+Requests distributed to all
+
+If B fails:
+
+↓
+
+Requests → A and C only
+```
+
+This provides near-instant failover for stateless services.
+
+---
+
+### 3. State Replication
+
+For stateful services, standby instances must receive replicated state.
+
+Example:
+
+```text
+Primary DB
+     |
+Synchronous / Asynchronous
+Replication
+     |
+Standby DB
+```
+
+Trade-offs:
+
+- **Synchronous replication:** Strong consistency, higher latency, minimal data loss.
+- **Asynchronous replication:** Lower latency, possible data loss during failover.
+
+---
+
+### 4. Automatic Failover
+
+A coordinator or consensus system decides when to promote a standby.
+
+```text
+Primary fails
+
+↓
+
+Failure detected
+
+↓
+
+Elect new leader
+
+↓
+
+Update routing
+
+↓
+
+Resume traffic
+```
+
+Distributed systems commonly use consensus protocols such as Raft to safely elect a new leader and avoid multiple primaries.
+
+---
+
+### 5. Traffic Redirection
+
+Traffic can be redirected at multiple layers:
+
+| Layer             | Typical Use                 |
+| ----------------- | --------------------------- |
+| Load Balancer     | Server or instance failures |
+| Service Discovery | Microservice failures       |
+| DNS               | Regional failover           |
+| Anycast           | Network-level failover      |
+
+---
+
+# Active-Active vs Active-Passive
+
+## Active-Active
+
+```text
+        LB
+      /    \
+     A      B
+   Active Active
+```
+
+If A fails:
+
+```text
+LB → B
+```
+
+Advantages:
+
+- Immediate failover
+- Higher throughput
+- Better resource utilization
+
+---
+
+## Active-Passive
+
+```text
+Primary
+
+↓
+
+Replication
+
+↓
+
+Standby
+```
+
+If Primary fails:
+
+```text
+Standby promoted
+
+↓
+
+Traffic redirected
+```
+
+Advantages:
+
+- Simpler
+- Easier consistency management
+
+Disadvantages:
+
+- Standby remains mostly idle
+
+---
+
+# Failure Detection
+
+Avoid reacting to a single missed heartbeat.
+
+Example policy:
+
+```text
+Heartbeat every 2 seconds
+
+Miss 1 → Ignore
+
+Miss 2 → Warning
+
+Miss 3 → Mark unhealthy
+```
+
+This reduces false positives caused by transient network issues.
+
+---
+
+# Split-Brain Prevention
+
+A dangerous scenario occurs when two nodes both believe they are the primary.
+
+```text
+Network Partition
+
+Primary A
+
+Primary B
+
+Both accept writes
+```
+
+Result:
+
+- Data divergence
+- Corruption
+- Conflicting updates
+
+Solutions:
+
+- Leader election
+- Quorum voting
+- Fencing tokens
+- Distributed consensus (e.g., Raft)
+
+---
+
+# Recovery and Failback
+
+Once the failed node comes back:
+
+```text
+Recover
+
+↓
+
+Synchronize missing data
+
+↓
+
+Health check passes
+
+↓
+
+Rejoin cluster
+```
+
+Avoid immediately making it primary again unless explicitly desired, as repeated promotions can cause instability ("flapping").
+
+---
+
+# Deep Design Considerations
+
+### Scalability
+
+- Multiple load balancers
+- Stateless application servers
+- Distributed health monitoring
+- Horizontal scaling
+
+### Availability
+
+- Multiple Availability Zones
+- Multi-region deployments
+- Database replicas
+- Redundant networking
+
+### Reliability
+
+- Automatic retries with exponential backoff
+- Circuit breakers
+- Graceful degradation
+- Idempotent request handling
+
+### Consistency
+
+Choose replication based on business requirements:
+
+- Strong consistency → synchronous replication
+- Eventual consistency → asynchronous replication
+
+---
+
+# Security / Observability
+
+Monitor:
+
+- Health check failures
+- Failover events
+- Replication lag
+- Heartbeat latency
+- Error rates
+- Request latency
+- Leader election frequency
+
+Log every failover decision and expose metrics and alerts so operators can quickly identify recurring failures or excessive failovers.
+
+---
+
+# Trade-offs
+
+| Decision                   | Benefits                    | Drawbacks                    |
+| -------------------------- | --------------------------- | ---------------------------- |
+| Active-Active              | Fast failover, scalable     | More complex synchronization |
+| Active-Passive             | Simpler, easier consistency | Idle standby resources       |
+| Synchronous replication    | Minimal data loss           | Higher latency               |
+| Asynchronous replication   | Better performance          | Possible data loss           |
+| Aggressive health checks   | Faster detection            | More false positives         |
+| Conservative health checks | Fewer false positives       | Slower failover              |
+
+---
+
+# Interview-ready summary
+
+> "A failover mechanism combines health checks, redundancy, state replication, and automated traffic redirection to maintain service availability during failures. Stateless services typically use load balancers to remove unhealthy instances, while stateful services require replicated state and leader election before promoting a standby. Key design concerns include accurate failure detection, preventing split-brain with consensus protocols, choosing between synchronous and asynchronous replication based on RPO/RTO goals, and ensuring observability to validate failover behavior in production."
+
 ## Question 5. What is split-brain problem in distributed systems?
 
 ## Question 6. How do you design a consensus algorithm?

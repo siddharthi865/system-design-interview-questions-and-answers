@@ -835,6 +835,357 @@ Where read performance is more important than perfect normalization.
 
 ## Question 4. What is denormalization and when is it useful?
 
+# Direct Answer
+
+**Denormalization** is the process of intentionally introducing **redundant or duplicated data** into a database to improve **read performance** and reduce expensive joins.
+
+It is essentially the opposite of normalization.
+
+> Normalization optimizes for data consistency; denormalization optimizes for query performance.
+
+---
+
+# Why Denormalize?
+
+Consider a normalized schema:
+
+```text
+Customers
+---------
+customer_id
+name
+
+Orders
+------
+order_id
+customer_id
+amount
+```
+
+To fetch orders with customer names:
+
+```sql
+SELECT o.order_id,
+       o.amount,
+       c.name
+FROM Orders o
+JOIN Customers c
+ON o.customer_id = c.customer_id;
+```
+
+At small scale, this is fine.
+
+At very large scale:
+
+- Billions of rows
+- Frequent reads
+- Multiple joins
+
+Joins can become expensive.
+
+---
+
+# Denormalized Design
+
+Store customer information directly in the order record:
+
+```text
+Orders
+------
+order_id
+customer_id
+customer_name
+amount
+```
+
+Now:
+
+```sql
+SELECT order_id,
+       customer_name,
+       amount
+FROM Orders;
+```
+
+No join required.
+
+---
+
+# Common Denormalization Techniques
+
+### 1. Duplicate Frequently Accessed Data
+
+Normalized:
+
+```text
+Users
+Orders
+```
+
+Denormalized:
+
+```text
+Order
+ ├── orderId
+ ├── customerId
+ └── customerName
+```
+
+Customer name is duplicated.
+
+---
+
+### 2. Embed Related Data
+
+Common in document databases.
+
+```json
+{
+  "userId": 1,
+  "name": "John",
+  "orders": [
+    {
+      "orderId": 101,
+      "amount": 100
+    }
+  ]
+}
+```
+
+Everything can be fetched with a single read.
+
+---
+
+### 3. Precomputed Aggregates
+
+Instead of computing repeatedly:
+
+```sql
+SELECT COUNT(*)
+FROM Likes
+WHERE postId = 123;
+```
+
+Store:
+
+```text
+Posts
+------
+post_id
+like_count
+```
+
+Read becomes O(1).
+
+---
+
+# When Is Denormalization Useful?
+
+## 1. Read-Heavy Systems
+
+When reads greatly outnumber writes.
+
+Examples:
+
+- Social media feeds
+- Product catalogs
+- News feeds
+- Search systems
+
+Example:
+
+```text
+Reads: 1,000,000/sec
+Writes: 5,000/sec
+```
+
+Optimizing reads is more valuable.
+
+---
+
+## 2. Large-Scale Distributed Systems
+
+Cross-node joins are expensive.
+
+Example:
+
+```text
+Shard 1 -> User Data
+Shard 2 -> Order Data
+```
+
+A join may require network calls between shards.
+
+Denormalization avoids these distributed joins.
+
+---
+
+## 3. Real-Time User Experiences
+
+Users expect responses in milliseconds.
+
+Examples:
+
+- Instagram feed
+- Facebook timeline
+- YouTube homepage
+- Amazon product page
+
+Precomputed and duplicated data improves latency.
+
+---
+
+## 4. Analytics and Reporting
+
+Data warehouses often use denormalized schemas such as star schemas.
+
+```text
+FactSales
+   |
+   +---- Product
+   +---- Customer
+   +---- Date
+```
+
+Designed for fast reporting queries.
+
+---
+
+# Trade-offs
+
+| Benefit         | Cost                      |
+| --------------- | ------------------------- |
+| Faster reads    | Duplicate data            |
+| Fewer joins     | More storage              |
+| Simpler queries | Complex updates           |
+| Lower latency   | Risk of inconsistent data |
+
+---
+
+# Example Trade-off
+
+Suppose customer name changes.
+
+Normalized:
+
+```text
+Customers
+---------
+John
+```
+
+Update one row.
+
+Denormalized:
+
+```text
+Orders
+-------
+John
+John
+John
+John
+John
+```
+
+Need to update many records.
+
+This introduces consistency challenges.
+
+---
+
+# Real-World Examples
+
+### Social Media Feed
+
+Instead of:
+
+```text
+Posts
+Users
+Comments
+Likes
+```
+
+and joining at request time,
+
+store a feed item like:
+
+```json
+{
+  "postId": 123,
+  "authorName": "John",
+  "likeCount": 500,
+  "commentCount": 20
+}
+```
+
+Feed generation becomes much faster.
+
+---
+
+### E-commerce Product Page
+
+Store:
+
+```text
+Product
+ ├── rating
+ ├── review_count
+ ├── seller_name
+ └── inventory_status
+```
+
+instead of calculating everything on every request.
+
+---
+
+# System Design Perspective
+
+A common interview pattern:
+
+### OLTP Database (Normalized)
+
+```text
+Users
+Orders
+Payments
+Inventory
+```
+
+Purpose:
+
+- Data correctness
+- Transactions
+
+---
+
+### Read Model / Cache (Denormalized)
+
+```text
+UserProfileView
+OrderSummaryView
+FeedView
+```
+
+Purpose:
+
+- Fast reads
+- Low latency
+
+This is common in:
+
+- CQRS architectures
+- Search systems
+- Recommendation systems
+- Feed generation systems
+
+---
+
+# Interview-Ready Summary
+
+> Denormalization is the intentional duplication of data to reduce joins and improve read performance. It is useful in read-heavy, large-scale systems where low latency is more important than minimizing redundancy. The trade-off is increased storage usage and more complex updates, since duplicated data must be kept consistent. In practice, transactional systems are often normalized, while read-heavy systems such as feeds, search indexes, and analytics stores are denormalized.
+
 ## Question 5. What are the different types of NoSQL databases?
 
 ## Question 6. What is a graph database and when is it used?

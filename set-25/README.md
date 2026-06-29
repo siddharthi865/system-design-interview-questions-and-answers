@@ -1422,6 +1422,507 @@ Lambda Architecture is well suited for:
 
 ## Question 4. How would you design an append-only log store?
 
+# Design an Append-Only Log Store
+
+## Direct answer
+
+An **append-only log store** is a storage system where data is **never updated or deleted in place**. Every new record is appended sequentially to the end of the log, creating an immutable history of events. Reads are performed by offset or key-based indexes, while background processes handle indexing, compaction, and retention.
+
+This design is widely used in distributed systems because sequential appends maximize write throughput, simplify replication, enable replay, and provide strong durability guarantees.
+
+Examples include:
+
+- **Apache Kafka** (event log)
+- **Apache Pulsar** (segment-based log)
+- Database **Write-Ahead Logs (WAL)**
+- Raft/Paxos replicated logs
+- Event Sourcing systems
+
+---
+
+# Requirements / Problem Framing
+
+## Functional Requirements
+
+- Append records in order
+- Read records by offset
+- Sequential scans
+- Support multiple log segments
+- Persist data durably
+- Replicate logs across nodes
+- Support retention and compaction
+- Recover after crashes
+
+## Non-Functional Requirements
+
+- Very high write throughput
+- Low append latency
+- Sequential disk I/O
+- Durable writes
+- Horizontally scalable
+- Fault tolerant
+- Efficient replay
+
+---
+
+# High-Level Architecture
+
+```text
+              Producers
+                  |
+          Append API Servers
+                  |
+        ------------------------
+        |                      |
+   Active Log Segment     Index Manager
+        |                      |
+        |               Offset Index
+        |               Timestamp Index
+        |
+     SSD / Disk
+        |
+ Segment Rotation
+        |
+ Replication Service
+        |
+ Followers
+
+------------------------------
+
+Background Services
+
+Compaction
+Retention
+Checksum Validation
+Snapshotting
+Monitoring
+```
+
+---
+
+# Data Model
+
+Each record contains:
+
+```text
+Offset
+Timestamp
+Key (optional)
+Value
+Headers
+Checksum
+```
+
+Example:
+
+```text
+Offset: 105
+Timestamp: 10:05:11
+Key: User123
+Value: Purchase Event
+Checksum: CRC32
+```
+
+The **offset** uniquely identifies a record and preserves ordering.
+
+---
+
+# Storage Layout
+
+Logs are divided into immutable **segments**.
+
+```text
+Segment-1
+
+Offset 0
+Offset 1
+Offset 2
+...
+Offset 99999
+
+------------------------
+
+Segment-2
+
+Offset 100000
+Offset 100001
+Offset 100002
+```
+
+Only the **active segment** accepts writes.
+
+Completed segments become read-only.
+
+Benefits:
+
+- Easier replication
+- Efficient cleanup
+- Parallel reads
+- Faster recovery
+
+---
+
+# Write Path
+
+```text
+Producer
+    |
+Append Request
+    |
+Leader
+    |
+Append to Memory Buffer
+    |
+Sequential Disk Write
+    |
+Update Offset
+    |
+Replicate
+    |
+ACK Producer
+```
+
+### Why Sequential Writes?
+
+Sequential disk writes are much faster than random writes.
+
+Advantages:
+
+- Higher throughput
+- Lower disk seek overhead
+- Better SSD/HDD utilization
+
+---
+
+# Read Path
+
+Reads are typically by offset.
+
+```text
+Consumer
+     |
+Offset = 2,500,000
+     |
+Locate Segment
+     |
+Binary Search Index
+     |
+Sequential Read
+```
+
+Indexes map offsets to physical file positions, avoiding full-file scans.
+
+---
+
+# Indexing
+
+Instead of indexing every record, use **sparse indexes**.
+
+Example:
+
+```text
+Offset        File Position
+
+0             0
+1000          65 KB
+2000          128 KB
+3000          194 KB
+```
+
+Read process:
+
+1. Find the nearest indexed offset.
+2. Seek to the file position.
+3. Scan forward until the target offset.
+
+This reduces memory usage while keeping lookups fast.
+
+---
+
+# Segment Rotation
+
+When a segment reaches a size threshold (e.g., 1 GB):
+
+```text
+Current Segment
+
+↓
+
+Close
+
+↓
+
+Create New Active Segment
+```
+
+Older segments become immutable.
+
+Benefits:
+
+- Simplifies replication
+- Enables retention policies
+- Improves recovery
+
+---
+
+# Replication
+
+A leader appends records and replicates them to followers.
+
+```text
+            Leader
+
+          Offset 105
+
+         /          \
+
+Follower A      Follower B
+```
+
+Flow:
+
+1. Producer writes to leader.
+2. Leader appends locally.
+3. Followers replicate the entry.
+4. Leader acknowledges once the desired replication quorum is reached.
+
+This ensures durability even if the leader fails.
+
+---
+
+# Crash Recovery
+
+On restart:
+
+1. Read the latest segment.
+2. Verify checksums.
+3. Truncate any partially written records.
+4. Rebuild in-memory indexes.
+5. Resume appending from the last committed offset.
+
+Because data is immutable, recovery is straightforward and deterministic.
+
+---
+
+# Log Compaction
+
+Without compaction:
+
+```text
+User1 -> Name=A
+User1 -> Name=B
+User1 -> Name=C
+```
+
+All updates remain forever.
+
+With **log compaction**:
+
+```text
+User1 -> Name=C
+```
+
+Only the latest value for each key is retained while preserving append semantics during normal operation.
+
+Useful for:
+
+- Configuration topics
+- Metadata
+- State machine replication
+
+---
+
+# Retention
+
+Retention prevents unbounded growth.
+
+Common policies:
+
+- **Time-based:** Keep logs for 7 days.
+- **Size-based:** Keep the latest 10 TB.
+- **Compaction-based:** Retain the latest record per key.
+
+Expired segments are deleted by background workers.
+
+---
+
+# Deep Design Considerations
+
+## 1. Batching
+
+Instead of writing one record at a time:
+
+```text
+100 Records
+
+↓
+
+Single Disk Write
+```
+
+Benefits:
+
+- Higher throughput
+- Fewer system calls
+- Better disk efficiency
+
+---
+
+## 2. Zero-Copy Reads
+
+For large reads, use OS facilities such as `sendfile()` or memory-mapped files.
+
+Benefits:
+
+- Reduced CPU usage
+- Fewer memory copies
+- Higher throughput
+
+This technique is heavily used in systems like Kafka.
+
+---
+
+## 3. Checksums
+
+Each record includes a checksum.
+
+```text
+Record
+
++
+
+CRC32
+```
+
+During reads, verify the checksum to detect corruption caused by disk or network errors.
+
+---
+
+## 4. Backpressure
+
+If producers outpace disk throughput:
+
+```text
+Producer
+
+↓
+
+Queue Full
+
+↓
+
+Slow Producer
+```
+
+Mechanisms include:
+
+- Rate limiting
+- Bounded queues
+- Flow control
+- Rejecting writes under sustained overload
+
+---
+
+## 5. Partitioning
+
+A single log eventually becomes a bottleneck.
+
+Partition by key:
+
+```text
+Orders
+
+↓
+
+Hash(OrderID)
+
+↓
+
+Partition 1
+
+Partition 2
+
+Partition 3
+```
+
+Each partition maintains its own ordered append-only log, enabling parallelism.
+
+---
+
+# Capacity / Sizing
+
+Assume:
+
+- **1 million writes/sec**
+- Average record size = **1 KB**
+
+Write throughput:
+
+```text
+1,000,000 × 1 KB ≈ 1 GB/sec
+```
+
+Daily storage:
+
+```text
+1 GB/sec × 86,400 sec
+
+≈ 86 TB/day
+```
+
+With a replication factor of **3**:
+
+```text
+≈ 258 TB/day
+```
+
+A 1 GB segment rotates roughly every second at this ingest rate, so larger segment sizes (e.g., 4–10 GB) are often chosen in high-throughput deployments to reduce management overhead.
+
+---
+
+# Security / Observability
+
+## Security
+
+- TLS between clients and servers
+- Authentication and authorization
+- Encryption at rest
+- Immutable audit logs
+- Per-tenant access control
+
+## Observability
+
+Monitor:
+
+- Append latency (P50/P95/P99)
+- Disk throughput
+- Replication lag
+- Consumer lag
+- Segment count
+- Disk utilization
+- Checksum failures
+- Write error rate
+- Recovery time
+
+---
+
+# Trade-offs
+
+| Decision                 | Pros                                          | Cons                                         |
+| ------------------------ | --------------------------------------------- | -------------------------------------------- |
+| Append-only storage      | Excellent write throughput, immutable history | Requires compaction and retention management |
+| Sparse indexes           | Low memory usage                              | Small sequential scan after lookup           |
+| Segment-based storage    | Easy rotation and cleanup                     | More metadata to manage                      |
+| Leader-based replication | Strong ordering and consistency               | Leader can become a bottleneck               |
+| Log compaction           | Reduces storage while preserving latest state | Background processing overhead               |
+| Partitioned logs         | Horizontal scalability                        | Ordering guaranteed only within a partition  |
+
+---
+
+# Interview-ready summary
+
+> "An append-only log store is optimized for high-throughput sequential writes by treating data as immutable and appending every new record to the end of the log. The log is divided into immutable segments, indexed by sparse offset indexes, and replicated for durability. Reads use offsets to locate records efficiently, while background services handle compaction, retention, and recovery. This architecture underpins systems like Kafka and database write-ahead logs because it offers excellent write performance, simple crash recovery, efficient replication, and the ability to replay history."
+
 ## Question 5. How do you implement deduplication at scale (like Gmail threads)?
 
 ## Question 6. How would you design a serverless workflow orchestration engine?

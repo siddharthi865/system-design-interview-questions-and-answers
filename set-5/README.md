@@ -1133,6 +1133,386 @@ Uses:
 
 ## Question 4. What are leader election algorithms (like Raft, Paxos)?
 
+# Direct answer
+
+**Leader election algorithms** are distributed consensus mechanisms used to select a single node as the **leader** among multiple nodes in a distributed system. The leader coordinates operations such as writes, replication, membership changes, and failover.
+
+Two of the most well-known consensus algorithms are **Paxos** and **Raft**. Both solve the problem of ensuring that a cluster of machines agrees on a leader and a sequence of operations, even in the presence of failures.
+
+---
+
+# Why Do We Need Leader Election?
+
+Consider a distributed database cluster:
+
+```text
+Node A
+Node B
+Node C
+```
+
+If all nodes accept writes independently:
+
+```text
+User 1 -> Node A
+User 2 -> Node B
+```
+
+Data can diverge and become inconsistent.
+
+Instead, elect one leader:
+
+```text
+        Leader
+       Node A
+      /      \
+ Node B     Node C
+(Follower) (Follower)
+```
+
+Now:
+
+```text
+Writes -> Leader
+Reads  -> Leader or Followers
+```
+
+This simplifies consistency and coordination.
+
+---
+
+# Problems Leader Election Solves
+
+- Prevents split-brain scenarios
+- Coordinates writes
+- Manages replication
+- Handles failover automatically
+- Maintains a consistent system state
+
+Common systems using leader election:
+
+- Apache Kafka
+- etcd
+- Apache ZooKeeper
+- Consul
+- Kubernetes
+
+---
+
+# Raft Consensus Algorithm
+
+Raft was designed to be easier to understand than Paxos while providing similar guarantees.
+
+## Node States
+
+A node can be in one of three states:
+
+```text
+Leader
+Follower
+Candidate
+```
+
+### Follower
+
+Default state.
+
+```text
+Leader ---> Heartbeats ---> Followers
+```
+
+Followers simply receive updates from the leader.
+
+---
+
+### Candidate
+
+If a follower stops receiving heartbeats:
+
+```text
+Heartbeat Timeout
+       ↓
+Become Candidate
+```
+
+The candidate starts an election.
+
+---
+
+### Leader
+
+If the candidate receives votes from a majority:
+
+```text
+5-node cluster
+
+Need 3 votes
+```
+
+It becomes leader and starts sending heartbeats.
+
+---
+
+# Raft Election Process
+
+Example with 5 nodes:
+
+```text
+A B C D E
+```
+
+Initially:
+
+```text
+Leader = A
+```
+
+Suppose A crashes:
+
+```text
+A (DOWN)
+
+B C D E
+```
+
+After timeout:
+
+```text
+B becomes Candidate
+```
+
+Requests votes:
+
+```text
+Vote for B?
+```
+
+Responses:
+
+```text
+C -> Yes
+D -> Yes
+E -> No
+```
+
+B receives:
+
+```text
+3/5 votes
+```
+
+Majority achieved.
+
+```text
+Leader = B
+```
+
+Cluster continues operating.
+
+---
+
+# Raft Log Replication
+
+Raft doesn't only elect leaders—it also keeps data consistent.
+
+```text
+Client
+   |
+ Leader
+   |
+-----------
+|         |
+F1        F2
+```
+
+When a write arrives:
+
+1. Leader appends entry to its log.
+2. Replicates to followers.
+3. Majority acknowledges.
+4. Entry is committed.
+5. Leader responds to client.
+
+```text
+Commit after majority replication
+```
+
+This guarantees consistency even if some nodes fail.
+
+---
+
+# Paxos Consensus Algorithm
+
+Paxos is the classic consensus algorithm developed by Leslie Lamport.
+
+It provides strong consistency but is considered harder to understand and implement.
+
+---
+
+## Paxos Roles
+
+### Proposer
+
+Proposes a value.
+
+### Acceptor
+
+Votes on proposals.
+
+### Learner
+
+Learns the chosen value.
+
+```text
+Proposer
+    |
+Acceptors
+    |
+ Learners
+```
+
+---
+
+# Paxos Election Flow (Simplified)
+
+### Phase 1: Prepare
+
+A proposer sends:
+
+```text
+Proposal #100
+```
+
+Acceptors respond:
+
+```text
+Promise not to accept lower numbers
+```
+
+---
+
+### Phase 2: Accept
+
+Proposer sends:
+
+```text
+Accept Proposal #100
+```
+
+Acceptors vote.
+
+If majority agrees:
+
+```text
+Value Accepted
+```
+
+Consensus achieved.
+
+---
+
+# Raft vs Paxos
+
+| Feature                   | Raft      | Paxos    |
+| ------------------------- | --------- | -------- |
+| Ease of Understanding     | Easier    | Harder   |
+| Industry Adoption         | Very High | High     |
+| Leader Based              | Yes       | Usually  |
+| Implementation Complexity | Lower     | Higher   |
+| Interview Friendliness    | Excellent | Moderate |
+| Consensus Guarantees      | Strong    | Strong   |
+
+In interviews, Raft is often preferred because it's easier to explain.
+
+---
+
+# Majority Quorum Concept
+
+Both Raft and Paxos rely on a quorum.
+
+For N nodes:
+
+```text
+Quorum = floor(N/2) + 1
+```
+
+Examples:
+
+| Nodes | Majority |
+| ----- | -------- |
+| 3     | 2        |
+| 5     | 3        |
+| 7     | 4        |
+
+Why?
+
+Because any two majorities must overlap.
+
+```text
+5 Nodes
+
+Majority 1 = A B C
+Majority 2 = C D E
+```
+
+Shared node:
+
+```text
+C
+```
+
+This overlap prevents conflicting decisions.
+
+---
+
+# Split-Brain Problem
+
+Without leader election:
+
+```text
+Node A thinks:
+"I am leader"
+
+Node B thinks:
+"I am leader"
+```
+
+Two leaders can accept conflicting writes.
+
+Raft and Paxos avoid this through:
+
+- Majority voting
+- Election terms/proposal numbers
+- Quorum requirements
+
+Only one leader can be elected for a given term.
+
+---
+
+# Real-World Usage
+
+### Raft
+
+Used by:
+
+- etcd
+- Consul
+- RethinkDB
+
+### Paxos
+
+Used in systems inspired by or derived from Paxos:
+
+- Google Chubby
+- Apache Cassandra (Paxos-based lightweight transactions)
+- Spanner (uses consensus concepts related to Paxos)
+
+---
+
+# Interview-ready Summary
+
+"Leader election algorithms allow a distributed system to select a single coordinator node and maintain consistency despite failures. Raft and Paxos are consensus algorithms that use majority voting to elect leaders and agree on operations. Raft is easier to understand and widely used in systems like etcd and Consul, while Paxos is more theoretically foundational but more complex. Both ensure that only one leader is active at a time and that the cluster remains consistent even when nodes fail."
+
 ## Question 5. What is consensus in distributed systems?
 
 ## Question 6. How do you design a highly available system?

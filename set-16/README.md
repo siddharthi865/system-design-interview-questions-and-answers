@@ -523,6 +523,251 @@ Cache Ready
 
 ## Question 4. What is a dead letter queue (DLQ)?
 
+# Dead Letter Queue (DLQ)
+
+## Direct answer
+
+A **Dead Letter Queue (DLQ)** is a special queue that stores messages that **cannot be successfully processed** after a configured number of retry attempts. Instead of repeatedly failing and blocking the main queue, these messages are isolated for later inspection, debugging, or manual reprocessing.
+
+DLQs improve the **reliability** and **resilience** of message-driven systems.
+
+---
+
+## Why do we need a DLQ?
+
+In distributed systems, message processing can fail for various reasons:
+
+- Invalid message format
+- Corrupted data
+- Missing required fields
+- Downstream service failures
+- Business logic errors
+- Unexpected exceptions
+
+Without a DLQ:
+
+```text
+Producer
+    │
+    ▼
+Main Queue
+    │
+    ▼
+Consumer
+    │
+ Processing Fails
+    │
+    └──────────► Retry Forever
+```
+
+Problems:
+
+- Infinite retry loops
+- Wasted compute resources
+- Queue backlog grows
+- Valid messages are delayed (head-of-line blocking)
+- Difficult to identify problematic messages
+
+---
+
+## How a DLQ works
+
+A message is retried a limited number of times.
+
+If it still fails, it is moved to the DLQ.
+
+```text
+Producer
+    │
+    ▼
+Main Queue
+    │
+    ▼
+Consumer
+    │
+Success ─────────► Done
+
+Failure
+    │
+Retry 1
+    │
+Retry 2
+    │
+Retry 3
+    │
+Still Fails
+    ▼
+Dead Letter Queue (DLQ)
+```
+
+The main queue continues processing other messages while failed ones are safely isolated.
+
+---
+
+## What is stored in a DLQ?
+
+A DLQ typically stores:
+
+- Original message payload
+- Message ID
+- Timestamp
+- Retry count
+- Error message or exception
+- Stack trace (optional)
+- Metadata (topic, partition, headers, etc.)
+
+This information helps engineers diagnose the root cause.
+
+---
+
+## Common use cases
+
+### 1. Invalid data
+
+```json
+{
+  "userId": null,
+  "amount": 500
+}
+```
+
+The consumer requires a valid `userId`.
+
+After multiple failed retries, the message is sent to the DLQ.
+
+---
+
+### 2. Payment processing
+
+```text
+Order Created
+      │
+      ▼
+Payment Service
+      │
+Database Exception
+      │
+Retry
+      │
+Retry
+      │
+Retry
+      ▼
+DLQ
+```
+
+Operations teams can later inspect and replay the message after fixing the issue.
+
+---
+
+### 3. Email notifications
+
+Suppose an email message contains an invalid recipient address.
+
+Rather than blocking all other emails, only the invalid message is moved to the DLQ.
+
+---
+
+## Benefits
+
+- Prevents infinite retry loops
+- Keeps the main queue flowing
+- Improves fault isolation
+- Simplifies debugging
+- Enables manual or automated replay after issues are resolved
+- Preserves failed messages instead of losing them
+
+---
+
+## Best practices
+
+### Set a retry limit
+
+Example:
+
+- Retry 1
+- Retry 2
+- Retry 3
+- Move to DLQ
+
+Avoid retrying indefinitely.
+
+---
+
+### Use exponential backoff
+
+Instead of retrying immediately:
+
+```text
+Retry 1 → 1 sec
+
+Retry 2 → 5 sec
+
+Retry 3 → 30 sec
+```
+
+This reduces pressure on a failing downstream service.
+
+---
+
+### Monitor the DLQ
+
+Track metrics such as:
+
+- Number of messages in the DLQ
+- Rate of new failed messages
+- Oldest message age
+- Failure reasons
+
+A rapidly growing DLQ often indicates a systemic issue.
+
+---
+
+### Enable replay
+
+After fixing the root cause:
+
+```text
+DLQ
+   │
+Replay
+   │
+Main Queue
+   │
+Consumer
+```
+
+Replay should be **idempotent** so that processing the same message again does not produce duplicate side effects.
+
+---
+
+## Trade-offs
+
+| Advantages                          | Disadvantages                                  |
+| ----------------------------------- | ---------------------------------------------- |
+| Prevents blocking of the main queue | Requires operational monitoring                |
+| Preserves failed messages           | Uses additional storage                        |
+| Easier debugging                    | Replay logic adds complexity                   |
+| Improves system reliability         | Doesn't fix the underlying cause automatically |
+
+---
+
+## Real-world systems
+
+Many messaging systems support DLQs natively or through configuration, including:
+
+- Apache Kafka (using dead-letter topics)
+- RabbitMQ
+- Amazon Simple Queue Service (Dead-Letter Queues)
+- Azure Service Bus
+- Google Cloud Pub/Sub
+
+---
+
+## Interview-ready summary
+
+> A Dead Letter Queue (DLQ) is a dedicated queue for messages that cannot be processed successfully after a predefined number of retries. Instead of repeatedly retrying and blocking the main queue, failed messages are isolated for debugging, monitoring, and later replay. DLQs improve reliability, fault isolation, and operational visibility, and are a standard pattern in resilient event-driven architectures.
+
 ## Question 5. What is an append-only log in distributed systems?
 
 ## Question 6. Explain optimistic vs pessimistic locking

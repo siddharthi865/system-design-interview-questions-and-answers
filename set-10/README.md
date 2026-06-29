@@ -1091,6 +1091,304 @@ If one service is compromised, all services using that credential are at risk.
 
 ## Question 4. How do you prevent SQL injection at scale?
 
+# Direct answer
+
+**SQL injection is prevented by ensuring user input is never interpreted as SQL code.** At scale, this means combining **parameterized queries**, **input validation**, **least-privilege database access**, **secure APIs/ORMs**, **monitoring**, and **defense-in-depth** across all services—not relying on input sanitization alone.
+
+---
+
+# Requirements / Problem framing
+
+The system should:
+
+- Prevent SQL injection across all services.
+- Scale to hundreds of microservices and developers.
+- Enforce consistent security practices.
+- Detect and respond to attempted attacks.
+- Minimize performance overhead.
+
+---
+
+# High-level architecture
+
+```text
+                 Client
+                    |
+             API Gateway / WAF
+                    |
+        +-----------+-----------+
+        |           |           |
+   User Service  Order Service  Payment Service
+        |           |           |
+   Parameterized Queries / ORM
+        |           |           |
+        +-----------+-----------+
+                    |
+              Database Cluster
+```
+
+Every service interacts with the database through secure data access layers that enforce parameterized queries.
+
+---
+
+# Primary defense: Parameterized queries (Prepared Statements)
+
+The database treats user input as **data**, not executable SQL.
+
+### ❌ Vulnerable
+
+```sql
+SELECT * FROM users
+WHERE username = '" + username + "'
+```
+
+If `username` is:
+
+```text
+' OR 1=1 --
+```
+
+The resulting query becomes:
+
+```sql
+SELECT * FROM users
+WHERE username='' OR 1=1 --
+```
+
+This can return every row.
+
+---
+
+### ✅ Safe
+
+```sql
+SELECT * FROM users
+WHERE username = ?
+```
+
+The parameter is transmitted separately from the SQL statement, so it cannot change the query structure.
+
+This is the **most important defense**.
+
+---
+
+# Use ORMs carefully
+
+Modern ORMs generate parameterized queries automatically.
+
+Examples:
+
+- Prisma
+- TypeORM
+- Sequelize
+- Hibernate
+- Entity Framework
+
+However:
+
+```text
+ORM
+
+↓
+
+Raw SQL
+
+↓
+
+Potential SQL Injection
+```
+
+If developers execute raw SQL by concatenating strings, the protection is lost.
+
+---
+
+# Input validation
+
+Validate inputs before they reach the database.
+
+Examples:
+
+- Integer IDs should contain only digits.
+- Email addresses should match expected formats.
+- Dates should follow valid date formats.
+- Enforce maximum input lengths.
+
+Validation improves security but **does not replace parameterized queries**.
+
+---
+
+# Stored procedures
+
+Properly written stored procedures can reduce injection risks.
+
+Safe:
+
+```sql
+CALL GetUser(?)
+```
+
+Unsafe:
+
+```sql
+EXEC('SELECT * FROM users WHERE name=''' + @name + '''')
+```
+
+Dynamic SQL inside stored procedures remains vulnerable.
+
+---
+
+# Principle of least privilege
+
+The database account used by a service should have only the permissions it needs.
+
+Example:
+
+| Service           | Permissions              |
+| ----------------- | ------------------------ |
+| User Service      | SELECT, UPDATE on users  |
+| Order Service     | SELECT, INSERT on orders |
+| Reporting Service | Read-only                |
+
+If SQL injection occurs, the attacker's capabilities are limited by the account's privileges.
+
+---
+
+# API design
+
+Never expose arbitrary SQL execution through APIs.
+
+Bad:
+
+```text
+POST /query
+
+{
+   "sql": "SELECT * FROM users"
+}
+```
+
+Good:
+
+```text
+GET /users/{id}
+```
+
+The backend constructs queries internally using parameters.
+
+---
+
+# Escaping is not enough
+
+Escaping quotes can reduce some attacks, but:
+
+- Different databases have different escaping rules.
+- Mistakes are common.
+- New edge cases appear over time.
+
+**Parameterized queries are the preferred solution.**
+
+---
+
+# Web Application Firewall (WAF)
+
+A WAF can detect common SQL injection patterns before requests reach your application.
+
+Examples of suspicious payloads:
+
+```text
+UNION SELECT
+```
+
+```text
+' OR 1=1
+```
+
+```text
+DROP TABLE
+```
+
+A WAF is a useful **additional layer**, not a replacement for secure coding.
+
+---
+
+# Monitoring and detection
+
+Track:
+
+- Failed SQL queries
+- Database syntax errors
+- Unusual spikes in query failures
+- Repeated suspicious request patterns
+- WAF alerts
+- High-frequency login failures
+
+Alert on anomalies that may indicate probing or exploitation attempts.
+
+---
+
+# Security in microservices
+
+In large organizations:
+
+```text
+Developer
+
+↓
+
+Repository
+
+↓
+
+Static Security Scan
+
+↓
+
+CI/CD
+
+↓
+
+Production
+```
+
+Automated checks help ensure:
+
+- No string-concatenated SQL
+- Approved database libraries
+- ORM usage follows secure patterns
+- Security tests pass before deployment
+
+This keeps security consistent across many teams.
+
+---
+
+# Additional best practices
+
+- Use parameterized queries everywhere.
+- Avoid dynamic SQL whenever possible.
+- Keep database drivers and ORM libraries up to date.
+- Store database credentials securely using a secret management system.
+- Disable verbose database error messages in production.
+- Apply rate limiting to reduce automated attack attempts.
+- Perform regular penetration testing and code reviews.
+
+---
+
+# Trade-offs
+
+| Approach              | Advantages                             | Disadvantages                                               |
+| --------------------- | -------------------------------------- | ----------------------------------------------------------- |
+| Parameterized queries | Strongest and simplest defense         | Requires consistent developer adoption                      |
+| ORM                   | Reduces risk and improves productivity | Raw SQL APIs can bypass protections                         |
+| Stored procedures     | Can centralize business logic          | Unsafe if they build dynamic SQL                            |
+| WAF                   | Blocks many known attack patterns      | Can produce false positives/negatives; not sufficient alone |
+| Input validation      | Improves data quality and security     | Cannot prevent SQL injection by itself                      |
+
+---
+
+# Interview-ready summary
+
+> "To prevent SQL injection at scale, I'd enforce parameterized queries across all services and discourage raw SQL concatenation. I'd use ORMs or database libraries that default to prepared statements, validate inputs, apply least-privilege database permissions, and secure secrets through a centralized secret manager. In production, I'd add a WAF, monitor suspicious query patterns, integrate static analysis into CI/CD, and conduct regular security reviews. The key principle is ensuring user input is always treated as data, never as executable SQL."
+
 ## Question 5. What is a DDoS attack and how do you prevent it?
 
 ## Question 6. What is token-based authentication vs session-based?

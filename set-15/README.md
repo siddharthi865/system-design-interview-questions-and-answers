@@ -919,6 +919,280 @@ When designing secure distributed systems:
 
 ## Question 4. What is CSRF and how do you prevent it?
 
+# What is CSRF and how do you prevent it?
+
+## Direct answer
+
+**Cross-Site Request Forgery (CSRF)** is a web security attack in which a malicious website tricks a user's browser into sending an unwanted request to another website where the user is already authenticated.
+
+The attack succeeds because the browser **automatically includes authentication credentials** (such as cookies) with requests, causing the target website to believe the request came from the legitimate user.
+
+---
+
+# How CSRF Works
+
+Suppose a user is logged into a banking website.
+
+```text
+User Login
+      |
+Browser stores session cookie
+      |
+Cookie automatically sent
+with every request
+```
+
+The user then visits a malicious website.
+
+```text
+Victim Browser
+       |
+Malicious Website
+       |
+Hidden request
+       |
+Bank Website
+```
+
+The malicious site silently submits a request like:
+
+```http
+POST /transfer
+amount=10000
+to=attacker
+```
+
+Since the browser automatically attaches the bank's session cookie, the bank sees the request as coming from the authenticated user.
+
+---
+
+# Example Attack
+
+### Step 1: User logs in
+
+```text
+bank.com
+```
+
+Browser stores:
+
+```text
+Session Cookie
+```
+
+---
+
+### Step 2: User visits a malicious site
+
+```text
+evil.com
+```
+
+Hidden HTML:
+
+```html
+<form action="https://bank.com/transfer" method="POST">
+  <input type="hidden" name="amount" value="10000" />
+  <input type="hidden" name="to" value="attacker" />
+</form>
+
+<script>
+  document.forms[0].submit();
+</script>
+```
+
+The browser sends:
+
+```text
+POST /transfer
+Cookie: SESSION=abc123
+```
+
+The bank receives a valid session cookie and may process the transfer unless CSRF protections are in place.
+
+---
+
+# Why CSRF Happens
+
+CSRF relies on two conditions:
+
+1. The application uses **cookie-based authentication**.
+2. The browser automatically sends those cookies with requests.
+
+The attacker **cannot read** the response because of the browser's same-origin policy, but they can often trigger state-changing requests.
+
+---
+
+# How to Prevent CSRF
+
+## 1. CSRF Tokens (Primary Defense)
+
+Generate a unique, unpredictable token for each user session (or each form).
+
+```text
+Server
+   |
+Generate CSRF Token
+   |
+Store in session
+   |
+Send with HTML form
+```
+
+Form:
+
+```html
+<input type="hidden" name="csrf_token" value="X7A91BC" />
+```
+
+When the form is submitted:
+
+```text
+Browser
+   |
+POST
+csrf_token=X7A91BC
+   |
+Server
+   |
+Validate token
+```
+
+If the token is missing or invalid, reject the request.
+
+### Why it works
+
+A malicious website cannot read the legitimate site's pages, so it cannot obtain the correct CSRF token to include in the forged request.
+
+---
+
+## 2. SameSite Cookies
+
+Modern browsers support the `SameSite` cookie attribute.
+
+```http
+Set-Cookie:
+SESSION=abc123;
+SameSite=Lax
+```
+
+Options:
+
+| Setting  | Protection                                                                              |
+| -------- | --------------------------------------------------------------------------------------- |
+| `Strict` | Strongest CSRF protection; cookies are not sent on cross-site requests.                 |
+| `Lax`    | Good default; protects most state-changing requests while preserving common navigation. |
+| `None`   | Cookies are sent cross-site; must also use `Secure`.                                    |
+
+This significantly reduces CSRF risk.
+
+---
+
+## 3. Check Origin or Referer Headers
+
+For sensitive requests, verify the `Origin` (preferred) or `Referer` header.
+
+Example:
+
+```text
+Origin: https://bank.com
+```
+
+Reject requests from unexpected origins.
+
+---
+
+## 4. Use Custom Headers for APIs
+
+For AJAX requests:
+
+```http
+X-CSRF-Token: abc123
+```
+
+or
+
+```http
+X-Requested-With: XMLHttpRequest
+```
+
+A malicious website cannot generally add arbitrary custom headers in a simple cross-site form submission.
+
+---
+
+## 5. Avoid GET for State Changes
+
+Never use `GET` for operations like:
+
+```text
+/deleteUser
+/transferMoney
+/updateProfile
+```
+
+Use:
+
+```text
+POST
+PUT
+PATCH
+DELETE
+```
+
+GET requests should be safe and idempotent.
+
+---
+
+# CSRF vs XSS
+
+| CSRF                                                        | XSS                                                                                          |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Tricks a user's browser into sending authenticated requests | Injects malicious JavaScript into a trusted website                                          |
+| Exploits browser trust in the target site                   | Exploits user trust in the website                                                           |
+| Doesn't require reading the response                        | Can read and modify page content                                                             |
+| Mitigated with CSRF tokens and `SameSite` cookies           | Mitigated with output encoding, input validation, and a strong Content Security Policy (CSP) |
+
+---
+
+# CSRF in JWT-Based Authentication
+
+If a JWT is stored in:
+
+- **Cookies** → CSRF is still a concern because cookies are sent automatically.
+- **Authorization header** (e.g., `Bearer <token>`) → Traditional CSRF is generally **not** a concern because the browser does not automatically attach the header.
+
+However, storing tokens in browser-accessible storage (like `localStorage`) introduces different risks, particularly from XSS attacks.
+
+---
+
+# System Design Considerations
+
+In production systems:
+
+- Enable `SameSite=Lax` or `Strict` for session cookies where possible.
+- Use `Secure` and `HttpOnly` cookie attributes.
+- Protect all state-changing endpoints with CSRF tokens if using cookie-based authentication.
+- Validate `Origin` headers for sensitive operations.
+- Avoid state-changing GET endpoints.
+- Use short session lifetimes and support session/token revocation.
+
+---
+
+# Trade-offs
+
+| Technique                 | Advantages                          | Limitations                                          |
+| ------------------------- | ----------------------------------- | ---------------------------------------------------- |
+| CSRF Tokens               | Strong, widely adopted protection   | Requires server-side validation and token management |
+| SameSite Cookies          | Built into browsers, easy to deploy | May affect legitimate cross-site workflows           |
+| Origin/Referer Validation | Simple additional defense           | Headers may be absent in some situations             |
+| Custom Headers            | Effective for AJAX APIs             | Not applicable to traditional HTML form submissions  |
+
+---
+
+# Interview-ready Summary
+
+> CSRF is an attack where a malicious website causes a victim's browser to send authenticated requests to another site using automatically attached cookies. The primary defense is **CSRF tokens**, supplemented by **`SameSite` cookies**, **Origin/Referer validation**, and ensuring that **GET requests never perform state-changing actions**. In modern systems using cookie-based sessions, combining these defenses provides robust protection against CSRF attacks.
+
 ## Question 5. How do you design a secure multi-tenant system?
 
 ## Question 6. What is TLS termination at load balancers?

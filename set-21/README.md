@@ -596,6 +596,241 @@ A monolithic kernel runs all core OS services in kernel space, making it fast bu
 
 ## Question 4. How do you ensure API compatibility across versions?
 
+## **Direct answer**
+
+You ensure **API compatibility across versions** by following **backward-compatible evolution practices**: primarily using **versioning strategies, additive changes (not breaking changes), strict contract design, deprecation policies, and comprehensive testing** to guarantee old clients keep working while new functionality is introduced.
+
+---
+
+## **Requirements / problem framing**
+
+In distributed systems, API compatibility matters because:
+
+- Clients (mobile apps, services, partners) upgrade at different times
+- Old and new versions often run **simultaneously**
+- Breaking changes can cause system-wide outages
+
+So the goal is:
+
+> Allow APIs to evolve without breaking existing consumers.
+
+---
+
+## **Core strategies for API compatibility**
+
+### 1. **Use explicit API versioning**
+
+#### Common approaches:
+
+| Strategy            | Example                               | Notes                       |
+| ------------------- | ------------------------------------- | --------------------------- |
+| URI versioning      | `/v1/users`, `/v2/users`              | Most explicit, widely used  |
+| Header versioning   | `Accept: application/vnd.api.v2+json` | Cleaner URLs, more flexible |
+| Query param         | `/users?version=2`                    | Simple but less preferred   |
+| Content negotiation | MIME-based versioning                 | Advanced REST approach      |
+
+👉 Most real-world systems use **URI versioning for simplicity**.
+
+---
+
+### 2. **Prefer backward-compatible (additive) changes**
+
+Safe changes:
+
+- Add new fields (optional)
+- Add new endpoints
+- Add new response attributes
+- Extend enums (carefully)
+
+Unsafe changes (breaking):
+
+- Removing fields
+- Renaming fields
+- Changing field meaning/type
+- Changing required parameters
+
+👉 Rule of thumb:
+
+> “Never break existing contracts—only extend them.”
+
+---
+
+### 3. **Strict contract design (schema-first APIs)**
+
+Define APIs using:
+
+- OpenAPI / Swagger
+- Protobuf (gRPC)
+- JSON Schema
+
+This ensures:
+
+- Strong typing
+- Validation at compile/runtime
+- Clear expectations for consumers
+
+---
+
+### 4. **Support graceful deprecation lifecycle**
+
+Instead of removing APIs immediately:
+
+#### Lifecycle:
+
+1. **Introduce new version (v2)**
+2. **Mark v1 as deprecated**
+3. Add warnings in headers/logs
+4. Maintain both versions for a grace period
+5. Eventually sunset v1
+
+Example:
+
+```
+Deprecation: true
+Sunset: Sat, 01 Aug 2026 00:00:00 GMT
+```
+
+---
+
+### 5. **Use backward-compatible serialization rules**
+
+For JSON / Protobuf:
+
+#### JSON rules:
+
+- New fields must be optional
+- Ignore unknown fields in clients
+- Never reorder or rename fields blindly
+
+#### Protobuf rules (very important in interviews):
+
+- Never reuse field numbers
+- Only add new optional fields
+- Mark fields as deprecated, don’t delete immediately
+
+---
+
+### 6. **Strong client-server decoupling**
+
+Ensure clients are resilient to change:
+
+- Clients should ignore unknown fields
+- Servers should handle missing optional fields
+- Avoid tight coupling between internal models and API models
+
+👉 Always use **DTOs (Data Transfer Objects)** instead of exposing DB models.
+
+---
+
+### 7. **Contract testing & CI enforcement**
+
+Prevent accidental breaking changes:
+
+- Consumer-driven contract testing (e.g., Pact)
+- API schema diff tools
+- CI checks for:
+  - Removed fields
+  - Type changes
+  - Endpoint removals
+
+---
+
+### 8. **Feature flags for gradual rollout**
+
+Instead of changing API behavior globally:
+
+- Use feature flags to enable new behavior per:
+  - user
+  - region
+  - percentage rollout
+
+This helps:
+
+- Safe migration
+- A/B testing
+- rollback capability
+
+---
+
+## **High-level evolution model**
+
+```id="api_versioning_flow"
+Client (v1) ---> API Gateway ---> Service (v1 + v2 logic)
+                                 |
+Client (v2) ---> API Gateway --->|
+```
+
+Both versions co-exist during migration.
+
+---
+
+## **Deep design considerations**
+
+### 1. Backward vs forward compatibility
+
+| Type                | Meaning                            |
+| ------------------- | ---------------------------------- |
+| Backward compatible | New system supports old clients    |
+| Forward compatible  | Old clients tolerate new responses |
+
+Good systems aim for **both**.
+
+---
+
+### 2. Avoiding "version explosion"
+
+Bad design:
+
+- v1, v2, v3, v4...
+
+Better:
+
+- Keep **2–3 active versions max**
+- Prefer evolution over duplication
+
+---
+
+### 3. Data consistency across versions
+
+Sometimes v1 and v2:
+
+- write to same DB schema
+- but expose different API views
+
+This requires:
+
+- internal canonical data model
+- API-specific mapping layer
+
+---
+
+## **Trade-offs**
+
+| Approach                      | Pros             | Cons                 |
+| ----------------------------- | ---------------- | -------------------- |
+| URI versioning                | Simple, explicit | URL duplication      |
+| Header versioning             | Clean URLs       | Harder debugging     |
+| Aggressive versioning         | Fast evolution   | Client fragmentation |
+| Strict backward compatibility | Stable system    | Slower innovation    |
+
+---
+
+## **Common real-world pattern**
+
+Most large systems combine:
+
+- `/v1`, `/v2` API versioning
+- Additive schema evolution
+- Deprecation headers
+- Contract testing in CI
+- Feature flags for rollout
+
+---
+
+## **Interview-ready summary**
+
+API compatibility is ensured by designing APIs to evolve safely through versioning strategies, backward-compatible (additive) changes, strict schema contracts, and controlled deprecation cycles. Combined with contract testing and feature flags, this allows distributed systems to evolve without breaking existing clients while supporting long-term scalability and maintainability.
+
 ## Question 5. What is the CAP theorem trade-off for DynamoDB?
 
 ## Question 6. How would you design a read-heavy blog site?

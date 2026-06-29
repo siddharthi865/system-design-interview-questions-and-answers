@@ -848,6 +848,172 @@ A scalable spam filtering system uses a hybrid pipeline combining rule-based fil
 
 ## Question 4. What is a relay server?
 
+## Direct answer
+
+A **relay server** is an intermediate server that **forwards data (messages, requests, or traffic) between a sender and a destination**, without being the final endpoint itself. It acts as a **trusted or semi-trusted hop** in communication to enable routing, anonymity, reliability, or policy enforcement.
+
+In system design terms, a relay server is a **message forwarding layer** used when direct communication is not possible, not efficient, or not allowed.
+
+---
+
+## What a relay server does (core idea)
+
+At its simplest:
+
+```text
+Client A  →  Relay Server  →  Client B / Backend Service
+```
+
+Instead of A talking directly to B, everything flows through the relay.
+
+---
+
+## Common use cases
+
+### 1. Email systems (SMTP relay)
+
+One of the most classic uses.
+
+```text id="smtp_relay"
+Sender → SMTP Relay Server → Recipient Mail Server
+```
+
+- Ensures email delivery across domains
+- Applies spam filtering, authentication (SPF/DKIM/DMARC)
+- Handles retry logic if destination is unavailable
+
+---
+
+### 2. WebRTC / real-time communication (TURN servers)
+
+Used when peer-to-peer fails due to NAT/firewalls.
+
+```text id="webrtc_relay"
+User A ↔ Relay (TURN server) ↔ User B
+```
+
+- Fallback when direct P2P connection cannot be established
+- Adds latency but ensures connectivity
+
+---
+
+### 3. Messaging systems
+
+- Kafka brokers (log relay)
+- Pub/Sub systems
+- Chat servers
+
+Relay ensures:
+
+- durable delivery
+- fan-out
+- buffering for slow consumers
+
+---
+
+### 4. Network proxies (forward/reverse proxy)
+
+Relay-like behavior:
+
+- Reverse proxy (e.g., API gateway) forwards client requests to backend
+- Forward proxy relays client traffic to internet
+
+---
+
+## Key responsibilities of a relay server
+
+### 1. Forwarding
+
+- Receives data from sender
+- Routes it to correct destination
+
+---
+
+### 2. Decoupling sender and receiver
+
+- Sender doesn’t need to know receiver location
+- Enables loose coupling in distributed systems
+
+---
+
+### 3. Reliability handling
+
+- Retries failed deliveries
+- Buffers messages temporarily
+- Acknowledgment tracking (ACK/NAK)
+
+---
+
+### 4. Policy enforcement
+
+- Authentication / authorization
+- Rate limiting
+- Spam filtering (common in email relays)
+- Content inspection
+
+---
+
+### 5. Protocol translation
+
+- HTTP ↔ WebSocket
+- SMTP ↔ internal messaging formats
+- gRPC ↔ REST
+
+---
+
+## Deep system design perspective
+
+A relay server becomes important when:
+
+### 1. NAT/firewall constraints exist
+
+Devices cannot directly reach each other.
+
+### 2. Scalability requires decoupling
+
+Direct N-to-N connections don’t scale well:
+
+- Relay reduces connection complexity
+
+### 3. Reliability is required
+
+Relay can:
+
+- buffer messages
+- retry delivery
+- ensure ordering
+
+---
+
+## Trade-offs
+
+| Aspect       | Benefit                    | Cost                                  |
+| ------------ | -------------------------- | ------------------------------------- |
+| Reliability  | retries + buffering        | extra infrastructure                  |
+| Connectivity | works behind NAT/firewalls | added latency                         |
+| Scalability  | decouples systems          | potential bottleneck                  |
+| Control      | central policy enforcement | single point of failure if not scaled |
+
+---
+
+## Failure considerations
+
+A relay server itself can become a bottleneck or SPOF unless designed properly:
+
+### Mitigations
+
+- Horizontal scaling (multiple relay nodes)
+- Load balancing (L4/L7)
+- Clustering with replication
+- Stateless design where possible
+- Message persistence layer (Kafka/Redis/RabbitMQ)
+
+---
+
+## Interview-ready summary
+
+A relay server is an intermediary system that forwards messages or traffic between a sender and receiver, enabling connectivity, reliability, and policy enforcement in distributed systems. It is commonly used in email (SMTP relays), real-time communication (TURN servers), messaging systems, and API gateways. In large-scale designs, relay servers are typically horizontally scalable and often paired with buffering and retry mechanisms to ensure reliable delivery under failures and network constraints.
+
 ## Question 5. How do you design a web crawler like Googlebot?
 
 ## Question 6. How do you design a system with DNS load balancing?

@@ -1082,6 +1082,307 @@ A common interview point is:
 
 ## Question 4. What is the API Gateway pattern?
 
+# Direct answer
+
+The **API Gateway pattern** places a single entry point in front of multiple backend services. Instead of clients calling individual microservices directly, they send requests to the API Gateway, which routes, aggregates, secures, and manages those requests.
+
+In simple terms:
+
+> **Clients talk to one API Gateway, and the gateway talks to the appropriate backend services.**
+
+This pattern is widely used in microservices architectures to simplify client interactions and centralize cross-cutting concerns.
+
+---
+
+# Why do we need an API Gateway?
+
+Without an API Gateway:
+
+```text
+           Client
+          /   |   \
+         /    |    \
+ User Service Order Service Payment Service
+```
+
+Problems:
+
+- Clients need to know the location of every service.
+- Authentication and authorization are duplicated.
+- Each service implements rate limiting, logging, and monitoring separately.
+- Mobile/web clients often need to make multiple requests to build a single screen.
+
+With an API Gateway:
+
+```text
+              Client
+                 │
+          API Gateway
+       ┌─────┼─────┐
+       │     │     │
+    User  Order  Payment
+   Service Service Service
+```
+
+Clients interact with a single endpoint, while the gateway handles routing.
+
+---
+
+# Responsibilities of an API Gateway
+
+## 1. Request Routing
+
+Routes incoming requests to the correct backend service.
+
+Example:
+
+```text
+GET /users/123   → User Service
+GET /orders/456  → Order Service
+POST /payments   → Payment Service
+```
+
+---
+
+## 2. Authentication & Authorization
+
+Instead of every service validating tokens:
+
+```text
+Client
+
+↓
+
+JWT Validation
+
+↓
+
+API Gateway
+
+↓
+
+Forward authenticated request
+```
+
+The gateway can:
+
+- Validate JWTs
+- Verify API keys
+- Integrate with OAuth providers
+- Forward user identity to downstream services
+
+---
+
+## 3. Load Balancing
+
+The gateway distributes requests across healthy service instances.
+
+```text
+API Gateway
+
+↓
+
+User Service
+
+├── Instance 1
+├── Instance 2
+└── Instance 3
+```
+
+---
+
+## 4. Rate Limiting
+
+Protects backend services from abuse.
+
+Example policy:
+
+```text
+100 requests/minute/user
+```
+
+If the limit is exceeded, the gateway returns **HTTP 429 Too Many Requests**.
+
+---
+
+## 5. Request Aggregation
+
+A client may need data from multiple services.
+
+Without a gateway:
+
+```text
+Client
+
+↓
+
+User Service
+
+↓
+
+Order Service
+
+↓
+
+Payment Service
+```
+
+Three network calls.
+
+With aggregation:
+
+```text
+Client
+
+↓
+
+Gateway
+
+↓
+
+User Service
+Order Service
+Payment Service
+
+↓
+
+Single Response
+```
+
+This reduces client complexity and network round trips.
+
+---
+
+## 6. Protocol Translation
+
+The gateway can translate between protocols.
+
+Examples:
+
+- HTTP → gRPC
+- REST → GraphQL
+- WebSocket → HTTP
+
+This allows backend services to use efficient internal protocols while exposing a client-friendly API.
+
+---
+
+## 7. Caching
+
+Frequently requested responses can be cached.
+
+Example:
+
+```text
+GET /products
+```
+
+The gateway serves cached results, reducing backend load and improving latency.
+
+---
+
+## 8. Logging & Monitoring
+
+Since every request passes through the gateway, it's an ideal place to collect:
+
+- Request counts
+- Latency
+- Error rates
+- Access logs
+- Distributed tracing headers
+
+---
+
+# High-Level Architecture
+
+```text
+                Web
+              Mobile
+               Partner
+                  │
+           API Gateway
+        ┌──────┼──────┐
+        │      │      │
+     User   Order   Payment
+    Service Service Service
+             │
+         Database(s)
+```
+
+---
+
+# Benefits
+
+- Single entry point for clients
+- Simplified client logic
+- Centralized security
+- Centralized rate limiting
+- Easier API versioning
+- Request aggregation
+- Improved observability
+- Backend services remain focused on business logic
+
+---
+
+# Challenges
+
+- Can become a **Single Point of Failure (SPOF)** if not deployed redundantly.
+- May become a performance bottleneck if under-provisioned.
+- Risk of turning into a "god gateway" with excessive business logic.
+- Requires careful versioning and backward compatibility.
+
+To avoid these issues:
+
+- Deploy multiple gateway instances behind a load balancer.
+- Keep the gateway focused on infrastructure concerns rather than business workflows.
+
+---
+
+# API Gateway vs Load Balancer
+
+| Feature              | API Gateway    | Load Balancer                   |
+| -------------------- | -------------- | ------------------------------- |
+| Primary purpose      | API management | Traffic distribution            |
+| Routes by URL/path   | ✅             | Usually limited (especially L4) |
+| Authentication       | ✅             | ❌                              |
+| Rate limiting        | ✅             | ❌                              |
+| Request aggregation  | ✅             | ❌                              |
+| Caching              | ✅             | ❌                              |
+| Protocol translation | ✅             | ❌                              |
+| Distributes traffic  | ✅             | ✅                              |
+
+A load balancer decides **which instance** should receive a request, while an API Gateway decides **which service** should handle it and can apply higher-level policies.
+
+---
+
+# Design considerations
+
+When designing an API Gateway, consider:
+
+- **High availability:** Run multiple gateway instances behind a load balancer.
+- **Scalability:** Keep the gateway stateless to enable horizontal scaling.
+- **Security:** Enforce TLS, authentication, authorization, and input validation.
+- **Observability:** Emit metrics, logs, and distributed tracing information.
+- **Performance:** Cache responses where appropriate and minimize added latency.
+
+---
+
+# Trade-offs
+
+| Advantages                        | Disadvantages                                  |
+| --------------------------------- | ---------------------------------------------- |
+| Simplifies clients                | Additional network hop                         |
+| Centralized security and policies | Operational overhead                           |
+| Supports request aggregation      | Can become a bottleneck if poorly designed     |
+| Easier API evolution              | Misuse can lead to business logic accumulation |
+| Better monitoring and governance  | Requires high availability setup               |
+
+---
+
+# Interview-ready summary
+
+> "The API Gateway pattern introduces a single entry point for all client requests in a microservices architecture. It routes requests to the appropriate services and centralizes cross-cutting concerns such as authentication, authorization, rate limiting, request aggregation, caching, protocol translation, and observability. This simplifies clients and keeps backend services focused on business logic, but the gateway itself must be highly available, horizontally scalable, and should avoid containing business logic."
+
 ## Question 5. What is the difference between synchronous API calls and asynchronous events?
 
 ## Question 6. How do you design a streaming API system?

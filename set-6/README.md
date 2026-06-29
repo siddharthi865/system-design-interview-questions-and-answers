@@ -633,6 +633,246 @@ A component can be **both** a bottleneck and a SPOF. For example, a single datab
 
 ## Question 4. What is the difference between synchronous and asynchronous communication?
 
+# Direct answer
+
+**Synchronous communication** means the caller sends a request and **waits for the response before continuing**. **Asynchronous communication** means the caller sends a request and **continues its work without waiting**; the response or result is handled later.
+
+In distributed systems:
+
+- **Synchronous = Blocking**
+- **Asynchronous = Non-blocking**
+
+---
+
+# Intuition
+
+Imagine ordering food at a restaurant.
+
+### Synchronous
+
+You order at the counter and **stand there until your food is ready**.
+
+```
+Order → Wait → Receive Food → Leave
+```
+
+You can't do anything else while waiting.
+
+### Asynchronous
+
+You order, receive a buzzer, **sit down or do something else**, and collect your food when it's ready.
+
+```
+Order → Continue doing other things
+             ↓
+      Notification
+             ↓
+       Collect Food
+```
+
+---
+
+# Comparison
+
+| Aspect                | Synchronous       | Asynchronous                                             |
+| --------------------- | ----------------- | -------------------------------------------------------- |
+| Waits for response    | Yes               | No                                                       |
+| Caller blocked        | Yes               | No                                                       |
+| Coupling              | Tighter           | Looser                                                   |
+| Latency               | Higher for caller | Lower perceived latency                                  |
+| Scalability           | Lower             | Higher                                                   |
+| Complexity            | Simpler           | More complex                                             |
+| Failure handling      | Immediate         | Often requires retries, dead-letter queues, or callbacks |
+| Typical communication | HTTP, gRPC        | Message queues, event streaming                          |
+
+---
+
+# Synchronous communication
+
+The client waits until the server responds.
+
+```
+Client
+   │
+   │ Request
+   ▼
+Server
+   │
+   │ Processing
+   ▼
+Response
+   │
+   ▼
+Client continues
+```
+
+### Example
+
+A user logs in:
+
+1. User submits credentials.
+2. Authentication service verifies them.
+3. Returns success or failure.
+4. Only then can the user access the application.
+
+This is naturally synchronous because the client needs the result immediately.
+
+---
+
+# Asynchronous communication
+
+The sender doesn't wait for the work to complete.
+
+```
+Producer
+    │
+    ▼
+Message Queue
+    │
+    ▼
+Consumer
+```
+
+The producer can continue immediately after publishing the message.
+
+### Example
+
+Uploading a video:
+
+1. User uploads the file.
+2. Service stores it.
+3. A message is placed on a queue.
+4. Video processing workers transcode it.
+5. User is notified when processing finishes.
+
+The upload request returns quickly while processing happens in the background.
+
+---
+
+# Real-world examples
+
+### Synchronous
+
+- User login
+- Payment authorization
+- Fetching a product page
+- Checking account balance
+- Searching for products
+
+These operations require an immediate response.
+
+### Asynchronous
+
+- Sending emails
+- SMS notifications
+- Video transcoding
+- Image processing
+- Analytics event processing
+- Log aggregation
+- Background report generation
+
+These can happen later without blocking the user.
+
+---
+
+# Advantages and disadvantages
+
+## Synchronous
+
+### Advantages
+
+- Easier to understand and implement
+- Immediate response
+- Simpler debugging
+- Strong request-response semantics
+
+### Disadvantages
+
+- Caller is blocked
+- Higher end-to-end latency
+- Lower scalability under heavy load
+- One slow service can delay others
+- Cascading failures are more likely if downstream services become slow or unavailable
+
+---
+
+## Asynchronous
+
+### Advantages
+
+- Better scalability
+- Higher throughput
+- Better resource utilization
+- Decouples services
+- More resilient to temporary failures
+- Enables background processing
+
+### Disadvantages
+
+- More complex design
+- Harder debugging and tracing
+- Results are not immediate
+- Requires retries, idempotency, and careful error handling
+- Often involves eventual consistency
+
+---
+
+# When to use which?
+
+| Use case              | Recommended approach | Reason                                                          |
+| --------------------- | -------------------- | --------------------------------------------------------------- |
+| Login                 | Synchronous          | User needs immediate authentication result                      |
+| Payment authorization | Synchronous          | Must know if payment succeeded before proceeding                |
+| Place order           | Hybrid               | Confirm order synchronously, process fulfillment asynchronously |
+| Send email            | Asynchronous         | Doesn't need to block the user                                  |
+| Generate reports      | Asynchronous         | Long-running task                                               |
+| Video encoding        | Asynchronous         | Resource-intensive background processing                        |
+| Notifications         | Asynchronous         | Improves responsiveness                                         |
+
+---
+
+# Hybrid approach (common in modern systems)
+
+Many large-scale systems combine both approaches.
+
+Example: **E-commerce checkout**
+
+```
+User
+   │
+   ▼
+Order Service
+   │
+   ├── Synchronous → Payment Service
+   │
+   └── Asynchronous → Queue
+                        │
+                        ├── Email Service
+                        ├── Inventory Update
+                        ├── Shipping Service
+                        └── Analytics
+```
+
+The customer receives immediate confirmation that the order was placed, while secondary tasks are processed asynchronously to improve responsiveness and scalability.
+
+---
+
+# Trade-offs
+
+| Synchronous                       | Asynchronous                                  |
+| --------------------------------- | --------------------------------------------- |
+| Simpler programming model         | Better scalability                            |
+| Immediate feedback                | Higher throughput                             |
+| Lower system complexity           | Better fault isolation                        |
+| Tighter service coupling          | Looser service coupling                       |
+| Higher risk of cascading failures | More resilient but operationally more complex |
+
+---
+
+# Interview-ready summary
+
+> **Synchronous communication is a request-response model where the caller waits for the result before continuing, making it suitable for operations that require an immediate answer, such as authentication or payment authorization. Asynchronous communication allows the caller to continue without waiting, making it ideal for background tasks like notifications, media processing, and analytics. In distributed systems, synchronous communication offers simplicity, while asynchronous communication improves scalability, fault tolerance, and throughput at the cost of additional complexity.**
+
 ## Question 5. What is the difference between online (OLTP) and analytical (OLAP) databases?
 
 ## Question 6. What is a quorum in distributed systems?

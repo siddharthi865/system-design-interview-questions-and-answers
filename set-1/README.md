@@ -647,6 +647,286 @@ Those requirements drive the architecture.
 
 ## Question 4. What is scalability in system design?
 
+# Direct answer
+
+**Scalability** is a system's ability to handle increasing load (users, requests, data, or traffic) by adding resources, while maintaining acceptable performance and reliability.
+
+In simple terms:
+
+> A scalable system continues to work efficiently as demand grows.
+
+---
+
+# Why scalability matters
+
+A system that works for:
+
+- 100 users
+- 1,000 requests/day
+
+may completely fail at:
+
+- 10 million users
+- 100,000 requests/second
+
+Without scalability, you may see:
+
+- Slow response times
+- Database bottlenecks
+- Server crashes
+- Increased downtime
+
+Good system design anticipates growth and ensures the system can expand smoothly.
+
+---
+
+# Types of scalability
+
+## 1. Vertical Scaling (Scale Up)
+
+Increase the capacity of a single machine.
+
+Example:
+
+```text
+4 CPU, 16 GB RAM
+        ↓
+32 CPU, 128 GB RAM
+```
+
+### Advantages
+
+- Simple to implement
+- No application changes required
+
+### Disadvantages
+
+- Hardware limits exist
+- Expensive
+- Single point of failure remains
+
+Example:
+
+- Upgrading a database server from 16 GB RAM to 128 GB RAM.
+
+---
+
+## 2. Horizontal Scaling (Scale Out)
+
+Add more machines and distribute traffic among them.
+
+Example:
+
+```text
+1 Server
+   ↓
+10 Servers
+   ↓
+100 Servers
+```
+
+Architecture:
+
+```text
+Users
+   |
+Load Balancer
+   |
+-------------------
+|    |    |    |
+S1   S2   S3   S4
+```
+
+### Advantages
+
+- Nearly unlimited growth
+- Better fault tolerance
+- High availability
+
+### Disadvantages
+
+- More complex architecture
+- Requires distributed system design
+
+Most internet-scale systems use horizontal scaling.
+
+---
+
+# What can be scaled?
+
+## Application Layer
+
+Add more application servers.
+
+```text
+Load Balancer
+      |
+----------------
+|      |       |
+App1  App2   App3
+```
+
+This increases request handling capacity.
+
+---
+
+## Database Layer
+
+As traffic grows, databases often become bottlenecks.
+
+Techniques include:
+
+### Read Replicas
+
+```text
+         Primary
+         /     \
+Replica1      Replica2
+```
+
+Reads are distributed across replicas.
+
+---
+
+### Sharding
+
+Split data across multiple databases.
+
+```text
+Users A-M → Shard 1
+Users N-Z → Shard 2
+```
+
+This distributes storage and traffic.
+
+---
+
+## Cache Layer
+
+Instead of repeatedly hitting the database:
+
+```text
+User
+  |
+Cache
+  |
+Database
+```
+
+Frequently accessed data is served from cache.
+
+This dramatically improves scalability.
+
+---
+
+# Scalability dimensions
+
+A system may need to scale in multiple ways:
+
+| Dimension        | Example                |
+| ---------------- | ---------------------- |
+| Users            | 1M → 100M users        |
+| Requests         | 1K → 100K requests/sec |
+| Storage          | GB → PB of data        |
+| Bandwidth        | MB/s → GB/s            |
+| Geographic Reach | One region → Global    |
+
+---
+
+# Example: URL Shortener
+
+### Initial Design
+
+```text
+User
+  |
+Application
+  |
+Database
+```
+
+Works for thousands of requests.
+
+---
+
+### Scaled Design
+
+```text
+Users
+   |
+Load Balancer
+   |
+Application Servers
+   |
+Redis Cache
+   |
+Database Cluster
+   |
+Replicas/Shards
+```
+
+Now the system can support:
+
+- Millions of users
+- Billions of URLs
+- High request rates
+
+---
+
+# Scalability vs Performance
+
+These concepts are related but different.
+
+| Performance                 | Scalability                       |
+| --------------------------- | --------------------------------- |
+| How fast the system is now  | How well it handles future growth |
+| Current latency             | Growth capacity                   |
+| Single-machine optimization | Distributed growth                |
+
+Example:
+
+- A server responding in 10 ms is high-performance.
+- If it crashes when traffic doubles, it is not scalable.
+
+---
+
+# Scalability trade-offs
+
+Scaling often introduces complexity.
+
+| Benefit             | Cost                             |
+| ------------------- | -------------------------------- |
+| More throughput     | More infrastructure              |
+| Better availability | More coordination                |
+| Lower latency       | Additional caching               |
+| More capacity       | Increased operational complexity |
+
+Examples:
+
+- Sharding improves scale but complicates queries.
+- Replication improves availability but introduces consistency challenges.
+- Caching improves performance but can create stale data issues.
+
+---
+
+# Common scalability techniques
+
+- Load balancing
+- Caching (Redis, Memcached)
+- Database replication
+- Database sharding
+- CDN usage
+- Asynchronous processing with queues
+- Microservices
+- Stateless application servers
+- Distributed storage systems
+
+---
+
+# Interview-ready summary
+
+> Scalability is the ability of a system to handle increasing load by adding resources without significantly degrading performance or reliability. It can be achieved through vertical scaling (adding more power to a single machine) or horizontal scaling (adding more machines). In large-scale systems, scalability is typically achieved using load balancing, caching, replication, sharding, and distributed architectures to support growing users, traffic, and data volumes.
+
 ## Question 5. What is the difference between vertical scaling and horizontal scaling?
 
 ## Question 6. What are the pros and cons of vertical scaling?

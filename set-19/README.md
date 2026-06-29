@@ -851,6 +851,271 @@ Zombie processes in distributed systems are handled by combining **heartbeat-bas
 
 ## Question 4. What is replication lag and how do you mitigate it?
 
+## Direct answer
+
+**Replication lag** is the delay between when data is written to a **primary (leader) database** and when that same data becomes available on **replica (follower) nodes**.
+
+It happens because replicas apply changes asynchronously, so they temporarily fall behind the primary under load, network delays, or slow disk/CPU processing.
+
+You mitigate replication lag by:
+
+- Using **better replication strategies (semi-sync / sync where needed)**
+- **Scaling read replicas properly**
+- Reducing write amplification and transaction size
+- Using **read-after-write routing to primary when needed**
+- Improving replication pipeline efficiency (batching, parallelism, log shipping optimizations)
+
+---
+
+## Requirements / Problem Framing
+
+### Why replication exists
+
+Replication is used for:
+
+- High availability (failover)
+- Read scaling
+- Geo-distribution
+- Disaster recovery
+
+### Problem introduced
+
+Because replication is often asynchronous:
+
+- Primary commits first
+- Replicas catch up later
+
+This creates:
+
+- **stale reads**
+- inconsistent user experience
+- potential data anomalies (read-your-write violation)
+
+---
+
+## What causes replication lag?
+
+### 1. High write throughput
+
+Primary is overwhelmed → replication stream backlog builds up.
+
+### 2. Slow replica hardware
+
+Replica cannot apply WAL/binlog fast enough.
+
+### 3. Network latency
+
+Geo-replicated systems suffer from cross-region delay.
+
+### 4. Large transactions
+
+Big batch updates delay replication apply time.
+
+### 5. Single-threaded replication apply
+
+Some systems apply logs sequentially → bottleneck.
+
+---
+
+## High-Level Architecture
+
+```
+        WRITE PATH
+Client → Primary DB
+           |
+           | WAL / Binlog stream
+           v
+     Replication Log Queue
+           |
+           v
+   +----------------------+
+   | Replica DB Nodes     |
+   | (async apply)        |
+   +----------------------+
+           |
+           v
+        Read traffic
+```
+
+Lag = difference between:
+
+- Primary commit position
+- Replica apply position
+
+---
+
+## How replication lag manifests
+
+| Symptom               | Effect                     |
+| --------------------- | -------------------------- |
+| stale reads           | user sees old data         |
+| missing updates       | dashboards incorrect       |
+| inconsistent sessions | login / profile mismatch   |
+| failover risk         | data loss if primary fails |
+
+---
+
+## Mitigation Strategies
+
+### 1. Reduce write pressure on primary
+
+- Optimize queries (avoid large updates)
+- Batch writes efficiently
+- Avoid hot partitions
+
+👉 Less write volume = less replication backlog
+
+---
+
+### 2. Improve replication pipeline
+
+#### Techniques:
+
+- Parallel replication apply (multi-threaded replay)
+- Log batching (send multiple changes per network call)
+- Compression of replication logs
+- Efficient WAL/binlog format
+
+---
+
+### 3. Scale replica capacity
+
+- Add more replicas to distribute read load
+- Upgrade CPU/IOPS on replicas
+- Separate read-heavy workloads
+
+Important:
+
+> More replicas ≠ always lower lag (can increase replication fan-out pressure)
+
+---
+
+### 4. Use semi-synchronous replication
+
+| Mode      | Behavior                         |
+| --------- | -------------------------------- |
+| Async     | primary commits immediately      |
+| Semi-sync | waits for at least 1 replica ack |
+| Sync      | waits for all replicas           |
+
+Trade-off:
+
+- More consistency → higher write latency
+
+---
+
+### 5. Read-your-write consistency strategies
+
+Even if lag exists, you can hide it:
+
+- Route user reads to primary after write
+- Sticky sessions (session affinity)
+- “Read from primary for X seconds after write”
+
+Example:
+
+```
+if (recent_write_user):
+    read_from_primary()
+else:
+    read_from_replica()
+```
+
+---
+
+### 6. Lag monitoring + adaptive routing
+
+Track:
+
+- replication delay (seconds behind primary)
+- WAL apply rate
+- replica throughput
+
+Then:
+
+- exclude lagging replicas from load balancer
+- route traffic dynamically
+
+---
+
+### 7. Geo-replication optimizations
+
+For cross-region systems:
+
+- Use region-local primaries (multi-leader or sharded leaders)
+- Reduce cross-region writes
+- Use async replication only for DR
+
+---
+
+### 8. Break large transactions
+
+Big transactions are lag amplifiers.
+
+Instead:
+
+- chunk updates
+- stream writes
+- avoid bulk locking operations
+
+---
+
+### 9. Backpressure mechanisms
+
+If replica lag grows:
+
+- throttle write traffic
+- delay non-critical jobs
+- shed low-priority load
+
+---
+
+## Trade-offs
+
+| Approach                    | Pros               | Cons                    |
+| --------------------------- | ------------------ | ----------------------- |
+| Async replication           | fast writes        | stale reads             |
+| Sync replication            | strong consistency | high latency            |
+| Semi-sync                   | balanced           | complex tuning          |
+| read-primary fallback       | correctness        | higher cost             |
+| aggressive scaling replicas | more reads         | higher replication load |
+
+---
+
+## Advanced considerations
+
+### 1. Replication lag is not just time delay
+
+It can also mean:
+
+- log position lag
+- transaction ID lag
+- snapshot lag
+
+Different DBs measure differently.
+
+---
+
+### 2. Lag amplification problem
+
+High read traffic → more load on replicas → slower apply → more lag → worse reads → feedback loop.
+
+---
+
+### 3. Eventual consistency model
+
+Most distributed systems accept:
+
+> “Replica correctness is time-delayed correctness”
+
+But must manage user expectations carefully.
+
+---
+
+## Interview-ready summary
+
+Replication lag is the delay between writes on a primary database and their propagation to replicas due to asynchronous log shipping and apply delays. It causes stale reads and inconsistency issues in distributed systems. It is mitigated through improved replication efficiency (parallelism, batching), scaling replicas appropriately, reducing write pressure, using semi-synchronous replication where needed, and implementing application-level consistency strategies like read-your-write routing and lag-aware load balancing. The key trade-off is always between write latency, read consistency, and system scalability.
+
 ## Question 5. What is write-behind caching?
 
 ## Question 6. How do you design a strongly consistent distributed cache?

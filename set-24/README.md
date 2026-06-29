@@ -1656,6 +1656,503 @@ Distributed tracing helps identify which downstream service contributes most to 
 
 ## Question 4. How would you design a decentralized social network (like Mastodon)?
 
+# Design a Decentralized Social Network (like Mastodon)
+
+## Direct answer
+
+A decentralized social network consists of **independent servers (instances)** that each manage their own users, storage, moderation policies, and timelines while communicating through a **federation protocol** (such as ActivityPub). Users can follow and interact with accounts on any instance, creating a global social graph without relying on a single central authority.
+
+The key architectural principles are:
+
+- **Federation instead of centralization**
+- **Local autonomy with global interoperability**
+- **Asynchronous communication between servers**
+- **Eventual consistency across instances**
+- **Independent moderation and administration**
+
+---
+
+# 1. Requirements / Problem Framing
+
+## Functional Requirements
+
+### User Features
+
+- Register on an instance
+- Create posts
+- Follow users on other instances
+- Like, boost (repost), reply
+- View home and public timelines
+- Search users and posts
+- Upload media
+
+### Federation
+
+- Discover remote users
+- Deliver posts across instances
+- Synchronize profile updates
+- Propagate likes, replies, boosts
+- Handle follows/unfollows
+
+### Moderation
+
+- Block users
+- Block instances
+- Report abuse
+- Content filtering
+- Instance-specific moderation policies
+
+---
+
+## Non-Functional Requirements
+
+- High availability
+- Horizontal scalability
+- Eventual consistency
+- Fault tolerance
+- Low latency for local operations
+- Secure inter-instance communication
+
+---
+
+# 2. High-Level Architecture
+
+```text
+                  Instance A
+             +------------------+
+             | API Gateway      |
+             | User Service     |
+             | Timeline Service |
+             | Media Service    |
+             | Federation Svc   |
+             +--------+---------+
+                      |
+          ActivityPub Messages
+                      |
+---------------------------------------------------
+                      |
+             +--------+---------+
+             | Federation Svc   |
+             | User Service     |
+             | Timeline Service |
+             | Media Service    |
+             | Database         |
+             +------------------+
+                  Instance B
+
+Users on different instances can:
+Follow
+Reply
+Boost
+Like
+Message
+```
+
+Each instance operates independently while participating in the federation.
+
+---
+
+# 3. Core Components
+
+## API Gateway
+
+Handles:
+
+- Authentication
+- Rate limiting
+- Request routing
+
+---
+
+## User Service
+
+Stores:
+
+- Profiles
+- Followers
+- Following
+- Preferences
+- Block lists
+
+Local users are authoritative on their home instance.
+
+Remote users are represented by cached profile records.
+
+---
+
+## Post Service
+
+Responsible for:
+
+- Creating posts
+- Editing (if supported)
+- Deleting
+- Visibility rules
+- Media attachments
+
+Posts receive globally unique identifiers (typically URLs).
+
+---
+
+## Timeline Service
+
+Maintains:
+
+- Home timeline
+- Local timeline
+- Federated timeline
+
+The home timeline is built from followed accounts, both local and remote.
+
+---
+
+## Federation Service
+
+Responsible for:
+
+- Sending activities
+- Receiving remote activities
+- Signature verification
+- Retry logic
+- Deduplication
+- Queue management
+
+This is the heart of a decentralized platform.
+
+---
+
+# 4. Federation Model
+
+Suppose:
+
+```text
+Alice@instanceA.com
+
+follows
+
+Bob@instanceB.com
+```
+
+Flow:
+
+```text
+Alice follows Bob
+
+↓
+
+Instance A sends Follow activity
+
+↓
+
+Instance B verifies request
+
+↓
+
+Bob accepts
+
+↓
+
+Future posts are delivered to Instance A
+
+↓
+
+Alice sees Bob's posts
+```
+
+Instead of clients polling every remote instance, servers exchange activities asynchronously.
+
+---
+
+# 5. Activity Flow
+
+### Posting
+
+```text
+Alice creates post
+
+↓
+
+Store locally
+
+↓
+
+Generate Create activity
+
+↓
+
+Identify remote followers
+
+↓
+
+Send activities
+
+↓
+
+Remote instances validate
+
+↓
+
+Store locally
+
+↓
+
+Update followers' timelines
+```
+
+This push-based model reduces cross-instance read traffic.
+
+---
+
+# 6. Timeline Generation
+
+## Fan-out on Write
+
+When Alice posts:
+
+```text
+Followers
+
+↓
+
+Timeline updates immediately
+```
+
+Advantages:
+
+- Fast timeline reads
+- Good for typical social graphs
+
+Disadvantages:
+
+- Expensive for celebrity accounts
+
+---
+
+## Fan-out on Read
+
+Store posts once.
+
+Generate timelines dynamically.
+
+Advantages:
+
+- Cheap writes
+- Less duplication
+
+Disadvantages:
+
+- Slower reads
+
+---
+
+### Practical Hybrid
+
+Use:
+
+- Fan-out on write for normal users
+- Fan-out on read for high-follower ("celebrity") accounts
+
+This balances write amplification with read performance.
+
+---
+
+# 7. Federation Queue
+
+Federation should be asynchronous.
+
+```text
+Create Post
+
+↓
+
+Message Queue
+
+↓
+
+Federation Workers
+
+↓
+
+Remote Instances
+```
+
+Benefits:
+
+- Decouples posting from delivery
+- Handles retries
+- Absorbs traffic spikes
+- Improves reliability
+
+---
+
+# 8. Data Storage
+
+| Data             | Storage                  |
+| ---------------- | ------------------------ |
+| Users            | SQL                      |
+| Posts            | SQL / Distributed DB     |
+| Followers        | Graph-friendly tables    |
+| Timeline cache   | Redis                    |
+| Media            | Object Storage           |
+| Search index     | Elasticsearch/OpenSearch |
+| Federation queue | Kafka/RabbitMQ           |
+
+---
+
+# 9. Media Handling
+
+Media files are stored separately.
+
+```text
+Upload
+
+↓
+
+Object Storage
+
+↓
+
+CDN
+
+↓
+
+Referenced by posts
+```
+
+Remote instances may:
+
+- Cache media
+- Proxy media through their own servers
+- Fetch on demand
+
+This reduces repeated downloads and improves privacy.
+
+---
+
+# 10. Consistency Model
+
+Strong consistency across all instances is impractical.
+
+Instead:
+
+- Local writes are immediately consistent.
+- Remote updates propagate asynchronously.
+- Temporary differences between instances are expected.
+
+Examples:
+
+- Likes may appear seconds later.
+- Profile changes propagate gradually.
+- Deleted posts may persist briefly on remote caches.
+
+Eventual consistency provides better availability and scalability.
+
+---
+
+# 11. Scaling Strategy
+
+## Horizontal Scaling
+
+Each instance scales independently.
+
+```text
+API Servers
+
+↓
+
+Load Balancer
+
+↓
+
+Database
+
+↓
+
+Workers
+```
+
+---
+
+## Cache
+
+Redis caches:
+
+- Timelines
+- Profiles
+- Trending hashtags
+
+---
+
+## Queue Workers
+
+Dedicated workers handle:
+
+- Federation delivery
+- Media processing
+- Notifications
+- Search indexing
+
+---
+
+## CDN
+
+Static assets:
+
+- Images
+- Videos
+- Avatars
+
+served through CDNs.
+
+---
+
+# 12. Security / Observability
+
+## Security
+
+- OAuth/OpenID Connect for clients
+- HTTPS/TLS for all communication
+- HTTP Signatures or signed requests for federation
+- Input validation and sanitization
+- Rate limiting
+- Spam detection
+- Per-instance block and allow lists
+- Secure media handling and virus scanning
+
+## Observability
+
+Monitor:
+
+- Federation queue length
+- Delivery success/failure rates
+- Remote instance response times
+- Timeline generation latency
+- API P95/P99 latency
+- Database load
+- Cache hit ratio
+- Worker utilization
+
+Distributed tracing helps diagnose delays in federation and timeline updates.
+
+---
+
+# 13. Trade-offs
+
+| Decision             | Pros                                   | Cons                                     |
+| -------------------- | -------------------------------------- | ---------------------------------------- |
+| Federation           | No central point of failure or control | Operational complexity                   |
+| Eventual consistency | High availability and resilience       | Temporary inconsistencies                |
+| Fan-out on write     | Fast timeline reads                    | Expensive for users with many followers  |
+| Fan-out on read      | Efficient writes                       | Higher read latency                      |
+| Local moderation     | Community autonomy                     | Inconsistent moderation across instances |
+| Media caching        | Lower latency and bandwidth            | Additional storage requirements          |
+
+---
+
+# Interview-ready summary
+
+> "I would design a Mastodon-like platform as a federation of independent instances. Each instance owns its users, posts, moderation policies, and databases while communicating with other instances through a federation protocol like ActivityPub. Local writes are processed immediately, and activities such as follows, posts, likes, and boosts are delivered asynchronously through queues, providing eventual consistency. Timelines use a hybrid fan-out strategy, media is stored in object storage and served via CDNs, and each instance scales independently with stateless services, caches, and background workers. This architecture provides decentralization, fault isolation, and interoperability while allowing each community to govern itself."
+
 ## Question 5. What are hybrid consistency models in databases?
 
 ## Question 6. How would you design a multi-tenant SaaS application with strong isolation?

@@ -1230,6 +1230,499 @@ This prevents reprocessing after successful commits.
 
 ## Question 4. How do you design a real-time typing indicator system for a chat app?
 
+# Direct answer
+
+A **real-time typing indicator system** lets users know when another participant is actively typing without persisting this information. Unlike chat messages, typing events are **ephemeral**, **latency-sensitive**, and **best-effort**—it's acceptable to occasionally miss an event, but the indicator should appear and disappear quickly.
+
+The typical design uses **WebSockets**, a **presence service**, and **short-lived typing events** with automatic expiration.
+
+---
+
+# Requirements / Problem Framing
+
+### Functional Requirements
+
+- Show "User X is typing..."
+- Support one-to-one and group chats
+- Automatically stop showing the indicator after inactivity
+- Notify only participants in the conversation
+- Do not permanently store typing events
+
+### Non-functional Requirements
+
+- Very low latency (<100 ms preferred)
+- High scalability
+- Minimal bandwidth usage
+- High availability
+- Best-effort delivery (occasional misses are acceptable)
+
+---
+
+# High-Level Architecture
+
+```text
+                +----------------------+
+                |      Chat Client     |
+                +----------+-----------+
+                           |
+                     WebSocket
+                           |
+                 +---------v---------+
+                 | Realtime Gateway  |
+                 +---------+---------+
+                           |
+                  Typing Event
+                           |
+                 +---------v---------+
+                 | Presence Service  |
+                 +---------+---------+
+                           |
+                 Publish Typing Event
+                           |
+                  Pub/Sub (Redis/Kafka)
+                           |
+         +-----------------+-----------------+
+         |                                   |
+ +-------v-------+                   +-------v-------+
+ | Chat Server A |                   | Chat Server B |
+ +-------+-------+                   +-------+-------+
+         |                                   |
+   Notify Receiver                     Notify Receiver
+```
+
+---
+
+# Event Flow
+
+## User Starts Typing
+
+```
+Alice types
+
+↓
+
+Client sends
+
+typing_start(chatId, userId)
+
+↓
+
+Server
+
+↓
+
+Broadcast to chat participants
+
+↓
+
+Bob sees
+
+"Alice is typing..."
+```
+
+---
+
+## User Stops Typing
+
+Either:
+
+```
+typing_stop
+```
+
+or
+
+```
+No keystrokes for 3–5 seconds
+
+↓
+
+Server expires indicator
+
+↓
+
+Remove "typing..."
+```
+
+Using inactivity timeouts avoids relying solely on explicit `typing_stop`, which may never arrive if the user closes the app or loses connectivity.
+
+---
+
+# API Design
+
+### WebSocket Events
+
+**Start Typing**
+
+```json
+{
+  "type": "typing_start",
+  "chatId": "c101",
+  "userId": "u12"
+}
+```
+
+**Stop Typing**
+
+```json
+{
+  "type": "typing_stop",
+  "chatId": "c101",
+  "userId": "u12"
+}
+```
+
+Broadcast:
+
+```json
+{
+  "type": "user_typing",
+  "chatId": "c101",
+  "userId": "u12"
+}
+```
+
+---
+
+# Client Optimization
+
+Sending an event for every keystroke would overwhelm the server.
+
+Instead:
+
+```
+Key Press
+
+↓
+
+If not already typing
+
+↓
+
+Send typing_start
+
+↓
+
+Suppress further events
+
+↓
+
+Reset inactivity timer
+```
+
+Example:
+
+```
+Alice types:
+
+H
+He
+Hel
+Hell
+Hello
+```
+
+Instead of five events:
+
+```
+typing_start
+
+...
+
+typing_stop
+```
+
+Only two events are sent.
+
+---
+
+# Server-Side State
+
+Maintain temporary typing state.
+
+```text
+chatId
+
+↓
+
+typingUsers
+
+↓
+
+{
+   Alice,
+   Charlie
+}
+```
+
+Each entry has a short expiration.
+
+Example:
+
+```
+TTL = 5 seconds
+```
+
+No database persistence is needed.
+
+---
+
+# Scaling Strategy
+
+## Multiple WebSocket Servers
+
+```
+           LB
+        /      \
+ WS-1          WS-2
+```
+
+Alice and Bob may connect to different servers.
+
+Without coordination:
+
+- Alice's server doesn't know where Bob is connected.
+
+Solution:
+
+```
+Alice
+
+↓
+
+WS-1
+
+↓
+
+Redis Pub/Sub
+
+↓
+
+WS-2
+
+↓
+
+Bob
+```
+
+Each WebSocket server subscribes to typing events and forwards them to locally connected users.
+
+---
+
+## Presence Service
+
+Track:
+
+```
+User
+
+↓
+
+Current Connection
+
+↓
+
+Current Chats
+
+↓
+
+Online Status
+```
+
+This allows routing typing events only to participants currently connected.
+
+---
+
+# Group Chats
+
+If several users type simultaneously:
+
+```
+Alice typing
+
+Bob typing
+
+Charlie typing
+```
+
+Display:
+
+```
+Alice is typing...
+
+Alice and Bob are typing...
+
+3 people are typing...
+```
+
+The server maintains a set of active typists per chat and broadcasts updates.
+
+---
+
+# Deep Design Considerations
+
+## Event Throttling
+
+Without throttling:
+
+```
+10 keys/sec
+
+×
+
+1 million users
+
+=
+
+10 million events/sec
+```
+
+Instead:
+
+```
+Send at most once every 2–3 seconds
+```
+
+This dramatically reduces network traffic while keeping the UI responsive.
+
+---
+
+## Automatic Expiration
+
+Suppose:
+
+```
+typing_start
+
+↓
+
+Phone battery dies
+```
+
+No `typing_stop` arrives.
+
+Solution:
+
+```
+Every typing event
+
+↓
+
+TTL = 5 seconds
+
+↓
+
+Auto-remove
+```
+
+This prevents stale indicators.
+
+---
+
+## Best-Effort Delivery
+
+Typing indicators are **non-critical**.
+
+If one event is lost:
+
+```
+User briefly doesn't see typing
+```
+
+This is acceptable, unlike losing a chat message.
+
+Therefore:
+
+- No retries
+- No persistence
+- No durable queues
+
+---
+
+## Ordering
+
+Possible sequence:
+
+```
+typing_start
+
+↓
+
+typing_stop
+
+↓
+
+typing_start
+```
+
+Use timestamps or sequence numbers to ignore stale events that arrive out of order.
+
+---
+
+# Capacity Considerations
+
+Assume:
+
+- 10 million daily active users
+- 1 million concurrent users
+- Average typing session: 10 seconds
+- One `typing_start` and one `typing_stop` per session
+
+If each active user starts typing once per minute:
+
+```
+1M / 60
+
+≈ 16,700 typing starts/sec
+
+≈ 16,700 typing stops/sec
+
+≈ 33,400 events/sec
+```
+
+With throttling and lightweight payloads (tens of bytes), this is well within the capabilities of horizontally scaled WebSocket gateways and an in-memory Pub/Sub system like Redis.
+
+---
+
+# Security / Observability
+
+### Security
+
+- Authenticate WebSocket connections (JWT or session token).
+- Verify the sender belongs to the chat before broadcasting.
+- Apply rate limits to prevent event flooding.
+- Ignore malformed or spoofed typing events.
+
+### Observability
+
+Monitor:
+
+- Active WebSocket connections
+- Typing events/sec
+- Broadcast latency
+- Pub/Sub latency
+- Event drop rate
+- Average typing session duration
+- WebSocket disconnects and reconnects
+
+---
+
+# Trade-offs
+
+| Approach              | Advantages             | Disadvantages                                                                  |
+| --------------------- | ---------------------- | ------------------------------------------------------------------------------ |
+| Polling               | Simple                 | High latency and inefficient                                                   |
+| WebSockets            | Real-time, low latency | Persistent connection management                                               |
+| Durable Queue (Kafka) | Reliable               | Overkill for ephemeral events                                                  |
+| Redis Pub/Sub         | Fast, lightweight      | Messages are lost if subscribers are temporarily unavailable (acceptable here) |
+| TTL-based expiration  | Simple and resilient   | Indicator may linger briefly after typing stops                                |
+
+---
+
+# Interview-ready summary
+
+> "A typing indicator is an ephemeral, best-effort feature, so I'd implement it using WebSockets. When a user begins typing, the client sends a throttled `typing_start` event, and the server broadcasts it only to participants in that chat. The server stores typing state in memory with a short TTL, typically 3–5 seconds, so indicators automatically disappear even if a `typing_stop` event is never received. In a multi-server deployment, WebSocket servers synchronize through Redis Pub/Sub. Since typing events are transient, I wouldn't persist them or use durable messaging, keeping the design low-latency, scalable, and bandwidth-efficient."
+
 ## Question 5. What is a vector clock and how is it used in conflict resolution?
 
 ## Question 6. How do you design a low-latency leaderboard system?

@@ -1724,6 +1724,525 @@ Use centralized logging, metrics, distributed tracing, and alerts.
 
 ## Question 4. How do you design a document versioning system?
 
+# Design a Document Versioning System
+
+## Direct Answer
+
+A document versioning system (like Google Docs, Microsoft Office 365, Notion, or Git) stores every change made to a document, allowing users to view history, restore previous versions, compare changes, and collaborate. The key challenge is **efficiently storing versions while supporting concurrent editing, fast retrieval, and rollback**.
+
+Instead of storing a complete copy for every edit, production systems typically use a combination of **snapshots + incremental deltas (diffs)** to optimize storage and retrieval.
+
+---
+
+# 1. Requirements / Problem Framing
+
+## Functional Requirements
+
+### User Features
+
+- Create documents
+- Edit documents
+- Auto-save changes
+- View version history
+- Restore previous versions
+- Compare document versions
+- Share documents
+- Collaborate with multiple users
+- Search documents
+
+### Admin Features
+
+- Audit logs
+- Storage management
+- Retention policies
+
+---
+
+## Non-functional Requirements
+
+- Low-latency reads and writes
+- High availability
+- Durability (no data loss)
+- Efficient storage
+- Support millions of documents
+- Real-time collaboration
+- Strong consistency for committed versions
+
+---
+
+# 2. High-Level Architecture
+
+```text
+                 Web / Mobile Client
+                         |
+                  Load Balancer
+                         |
+                   API Gateway
+                         |
+ ----------------------------------------------------------
+ |          |             |             |                 |
+Document  Version     Collaboration  Notification     Search
+Service   Service       Service         Service        Service
+      \        |             |               |         /
+       \-------|-------------|---------------|--------/
+                    Event Bus (Kafka)
+                           |
+                   Background Workers
+
+Storage
+--------
+Document DB
+Version DB
+Object Storage
+Redis
+Search Index
+```
+
+---
+
+# 3. Core Components
+
+## Document Service
+
+Stores document metadata.
+
+```text
+Document
+---------
+document_id
+owner_id
+title
+created_at
+updated_at
+```
+
+---
+
+## Version Service
+
+Stores every version.
+
+```text
+Version
+---------
+version_id
+document_id
+version_number
+parent_version
+author
+created_at
+storage_type
+```
+
+Storage type
+
+```text
+FULL
+
+or
+
+DELTA
+```
+
+---
+
+## Collaboration Service
+
+Responsible for
+
+- Real-time editing
+- Cursor synchronization
+- Conflict resolution
+- Operational Transformation (OT) or CRDT algorithms
+
+---
+
+## Search Service
+
+Indexes
+
+- Document title
+- Content
+- Owner
+- Tags
+
+---
+
+# 4. Database Design
+
+## Document Table
+
+```text
+document_id
+owner_id
+title
+latest_version
+created_at
+```
+
+---
+
+## Version Table
+
+```text
+version_id
+document_id
+version_number
+storage_type
+parent_version
+blob_pointer
+created_at
+```
+
+---
+
+## Audit Table
+
+```text
+audit_id
+document_id
+user_id
+action
+timestamp
+```
+
+---
+
+# 5. Version Storage Strategies
+
+## Option 1: Full Copy
+
+Every save stores the entire document.
+
+```text
+V1
+100 KB
+
+↓
+
+V2
+100 KB
+
+↓
+
+V3
+100 KB
+```
+
+### Pros
+
+- Easy rollback
+- Fast retrieval
+
+### Cons
+
+- High storage cost
+
+---
+
+## Option 2: Delta Storage
+
+Store only changes.
+
+```text
+V1
+Full
+
+↓
+
++ Added paragraph
+
+↓
+
++ Fixed typo
+
+↓
+
++ Deleted sentence
+```
+
+Storage is significantly smaller.
+
+### Pros
+
+- Space efficient
+
+### Cons
+
+- Reconstructing older versions is slower.
+
+---
+
+## Option 3 (Preferred)
+
+Hybrid approach:
+
+```text
+V1 Full
+
+↓
+
+Delta
+
+↓
+
+Delta
+
+↓
+
+Delta
+
+↓
+
+V5 Full Snapshot
+
+↓
+
+Delta
+
+↓
+
+Delta
+```
+
+Every N versions (or based on size), create a full snapshot. Intermediate versions store only deltas.
+
+Benefits:
+
+- Fast retrieval
+- Lower storage costs
+- Efficient rollback
+
+---
+
+# 6. Save Flow
+
+```text
+User edits document
+        |
+Detect changes
+        |
+Generate delta
+        |
+Store delta/full snapshot
+        |
+Update latest version
+        |
+Publish VersionCreated event
+        |
+Index for search
+```
+
+---
+
+# 7. Restoring a Version
+
+```text
+User selects Version 7
+        |
+Load nearest snapshot
+        |
+Apply deltas up to Version 7
+        |
+Return reconstructed document
+```
+
+If restoring:
+
+```text
+Version 15
+
+↓
+
+Restore Version 7
+
+↓
+
+Create Version 16
+(contents of Version 7)
+```
+
+Instead of deleting history, create a **new version** representing the restored state. This preserves a complete audit trail.
+
+---
+
+# 8. Real-Time Collaboration
+
+Two users edit simultaneously:
+
+```text
+User A
+adds sentence
+
+User B
+deletes paragraph
+```
+
+Naive approach:
+
+```text
+Last write wins
+```
+
+This loses edits.
+
+### Better Solution
+
+Use:
+
+- **Operational Transformation (OT)** (Google Docs)
+- **CRDTs** (many modern collaborative editors)
+
+These algorithms merge concurrent edits while maintaining consistency.
+
+---
+
+# 9. Scaling Strategy
+
+## Stateless Services
+
+```text
+Load Balancer
+      |
+API 1
+API 2
+API 3
+```
+
+---
+
+## Object Storage
+
+Large document contents (snapshots/blobs) are stored in object storage.
+
+Database stores only metadata:
+
+```text
+blob_pointer
+
+↓
+
+Object Storage
+```
+
+---
+
+## Redis Cache
+
+Cache:
+
+- Latest document
+- Latest version
+- Frequently accessed documents
+
+This reduces database and object storage reads.
+
+---
+
+## Database Scaling
+
+### Read Replicas
+
+```text
+Primary
+  |
+Replica 1
+Replica 2
+```
+
+Reads (history, viewing) go to replicas.
+
+Writes (new versions) go to the primary.
+
+---
+
+# 10. Event-Driven Architecture
+
+Every version creation generates an event.
+
+```text
+VersionCreated
+        |
+       Kafka
+        |
+-----------------------------
+|            |              |
+Search     Analytics   Notification
+Indexer
+```
+
+Benefits:
+
+- Loose coupling
+- Better scalability
+- Independent downstream processing
+
+---
+
+# 11. Capacity / Sizing (Example)
+
+Assumptions:
+
+- 10 million documents
+- Average size: 500 KB
+- Average 20 versions/document
+- Average delta size: 5 KB
+- Snapshot every 10 versions
+
+Approximate storage per document:
+
+- 2 snapshots × 500 KB = 1 MB
+- 18 deltas × 5 KB = 90 KB
+- Total ≈ **1.09 MB**, compared to **10 MB** if every version were stored as a full copy.
+
+This hybrid approach reduces storage by nearly an order of magnitude while keeping retrieval efficient.
+
+---
+
+# 12. Security / Observability
+
+### Security
+
+- OAuth/JWT authentication
+- Document-level ACLs (owner, editor, viewer)
+- TLS encryption
+- Encryption at rest
+- Version audit logs
+- Immutable history for compliance (where required)
+
+### Observability
+
+Monitor:
+
+- Save latency
+- Version creation rate
+- Delta generation failures
+- Collaboration session count
+- Conflict resolution errors
+- Cache hit ratio
+- Object storage latency
+- Search indexing lag
+
+Use centralized logging, metrics, distributed tracing, and alerts.
+
+---
+
+# 13. Trade-offs
+
+| Design Choice             | Pros                                       | Cons                                                   |
+| ------------------------- | ------------------------------------------ | ------------------------------------------------------ |
+| Full-copy storage         | Simple and fast retrieval                  | High storage cost                                      |
+| Delta storage             | Very storage efficient                     | Slower reconstruction                                  |
+| Hybrid snapshots + deltas | Good balance of speed and storage          | More implementation complexity                         |
+| OT for collaboration      | Mature and battle-tested                   | Complex transformation logic                           |
+| CRDTs                     | Offline-friendly and eventually consistent | Higher metadata overhead and implementation complexity |
+
+---
+
+# Interview-Ready Summary
+
+> "I would separate document metadata from version storage. Metadata lives in a relational database, while document contents are stored as snapshots and deltas in object storage. Every edit creates a new immutable version, with periodic full snapshots to optimize retrieval. Redis caches the latest versions, and an event-driven architecture updates search indexes, notifications, and analytics asynchronously. For collaborative editing, I'd use Operational Transformation or CRDTs to merge concurrent edits without conflicts. This design provides efficient storage, fast access to recent versions, complete audit history, and scales to millions of documents."
+
 ## Question 5. How do you design a banking transaction system?
 
 ## Question 6. How do you design a hospital management system?

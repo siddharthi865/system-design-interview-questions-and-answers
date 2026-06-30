@@ -2155,6 +2155,210 @@ Distributed tracing helps diagnose delays in federation and timeline updates.
 
 ## Question 5. What are hybrid consistency models in databases?
 
+# Hybrid Consistency Models in Databases
+
+## Direct answer
+
+A **hybrid consistency model** combines multiple consistency guarantees within the same database or system, allowing different operations or data to use different consistency levels based on their requirements.
+
+Instead of enforcing **strong consistency everywhere** or **eventual consistency everywhere**, hybrid models let you make trade-offs between **latency, availability, and correctness** on a per-operation, per-table, or per-transaction basis.
+
+This is the approach used by many modern distributed databases because different workloads have different consistency needs.
+
+---
+
+# Why hybrid consistency?
+
+No single consistency model is optimal for every use case.
+
+For example, in an e-commerce application:
+
+- **Payment processing** requires **strong consistency**.
+- **Product recommendations** can tolerate **eventual consistency**.
+- **View counts** may use **causal** or **session consistency**.
+
+Using strong consistency for all operations would unnecessarily increase latency and reduce availability.
+
+---
+
+# Common consistency models
+
+| Model                | Guarantee                               | Typical Use Case           |
+| -------------------- | --------------------------------------- | -------------------------- |
+| Strong Consistency   | Always reads the latest committed value | Banking, inventory         |
+| Eventual Consistency | Replicas converge over time             | Social media feeds, caches |
+| Read-Your-Writes     | A user always sees their own writes     | User profiles              |
+| Monotonic Reads      | Reads never go backward in time         | Dashboards                 |
+| Causal Consistency   | Preserves cause-and-effect ordering     | Messaging, comments        |
+| Session Consistency  | Guarantees consistency within a session | Web applications           |
+
+A hybrid system may support several of these simultaneously.
+
+---
+
+# Example architecture
+
+```text
+               Client
+                  |
+           Database Router
+                  |
+      +-----------+-----------+
+      |                       |
+ Strong Consistency      Eventual Consistency
+     Partition              Partition
+      |                       |
+  Raft/Paxos             Async Replication
+```
+
+Different requests are routed based on their consistency requirements.
+
+---
+
+# Approaches to hybrid consistency
+
+## 1. Per-operation consistency
+
+The client specifies the required consistency level for each request.
+
+Example:
+
+```text
+Read account balance
+→ Strong consistency
+
+Read product recommendations
+→ Eventual consistency
+```
+
+This gives applications fine-grained control.
+
+---
+
+## 2. Per-table or per-collection consistency
+
+Different datasets use different replication strategies.
+
+Example:
+
+| Table           | Consistency         |
+| --------------- | ------------------- |
+| Accounts        | Strong              |
+| Orders          | Strong              |
+| User Sessions   | Session consistency |
+| Analytics       | Eventual            |
+| Recommendations | Eventual            |
+
+This is common in large microservice architectures.
+
+---
+
+## 3. Tunable consistency
+
+Some databases let clients choose how many replicas participate in reads and writes.
+
+Example:
+
+- Write to **1 replica** → low latency
+- Write to **majority** → stronger consistency
+- Read from **leader** → latest data
+- Read from **nearest replica** → lower latency
+
+This allows balancing latency and consistency dynamically.
+
+---
+
+## 4. Transaction-level consistency
+
+Some systems allow:
+
+```text
+Transaction A
+Strong consistency
+
+Transaction B
+Eventual consistency
+```
+
+Critical transactions use distributed consensus, while non-critical operations use asynchronous replication.
+
+---
+
+# Real-world examples
+
+| System               | Hybrid Consistency Approach                                    |
+| -------------------- | -------------------------------------------------------------- |
+| Google Cloud Spanner | Strong transactions with read-only stale reads                 |
+| Amazon DynamoDB      | Per-request strongly consistent or eventually consistent reads |
+| Apache Cassandra     | Tunable consistency (ONE, QUORUM, ALL, etc.)                   |
+| Azure Cosmos DB      | Multiple selectable consistency levels                         |
+| CockroachDB          | Strong transactions with follower/stale reads                  |
+
+---
+
+# Design considerations
+
+## Use strong consistency for
+
+- Financial transactions
+- Inventory management
+- Authentication
+- Distributed locks
+- Configuration data
+
+These operations require correctness over latency.
+
+---
+
+## Use eventual consistency for
+
+- News feeds
+- Likes
+- Analytics
+- Metrics
+- Search indexes
+- Recommendations
+
+These can tolerate temporary stale data.
+
+---
+
+## Combine them
+
+Example:
+
+```text
+User places an order
+        |
+        +--> Payment → Strong
+        |
+        +--> Inventory → Strong
+        |
+        +--> Recommendation update → Eventual
+        |
+        +--> Analytics event → Eventual
+        |
+        +--> Notification → Eventual
+```
+
+This reduces latency while preserving correctness where it matters.
+
+---
+
+# Trade-offs
+
+| Approach                        | Pros                                 | Cons                                                 |
+| ------------------------------- | ------------------------------------ | ---------------------------------------------------- |
+| Strong consistency everywhere   | Simple correctness model             | Higher latency, lower availability during partitions |
+| Eventual consistency everywhere | High availability and low latency    | Stale reads, conflict resolution required            |
+| Hybrid consistency              | Balances correctness and performance | More complex application design and reasoning        |
+
+---
+
+# Interview-ready summary
+
+> "Hybrid consistency models allow a distributed database to provide different consistency guarantees for different operations or datasets instead of enforcing a single global model. Critical operations like payments or inventory updates typically use strong consistency, while non-critical workloads such as analytics, feeds, and recommendations use eventual consistency. Many modern databases also support per-request or tunable consistency levels, enabling applications to balance latency, availability, and correctness based on business requirements. This flexibility is why hybrid consistency has become the preferred approach in large-scale distributed systems."
+
 ## Question 6. How would you design a multi-tenant SaaS application with strong isolation?
 
 ## Question 7. What are shadow writes, and how are they used in migration strategies?

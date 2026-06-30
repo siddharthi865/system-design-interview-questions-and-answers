@@ -1391,6 +1391,339 @@ This keeps security consistent across many teams.
 
 ## Question 5. What is a DDoS attack and how do you prevent it?
 
+# Direct answer
+
+A **Distributed Denial of Service (DDoS) attack** is an attack where **thousands or millions of compromised devices (a botnet) simultaneously send traffic to a target system**, overwhelming its resources and making the service unavailable to legitimate users.
+
+The primary defense is **a layered strategy** that combines **CDNs, DDoS protection services, rate limiting, load balancing, auto-scaling, Web Application Firewalls (WAFs), and traffic filtering**. No single mechanism is sufficient.
+
+---
+
+# Why DDoS attacks are dangerous
+
+The attacker attempts to exhaust one or more critical resources:
+
+- Network bandwidth
+- CPU
+- Memory
+- Database connections
+- Application threads
+- Load balancer capacity
+
+Example:
+
+```text
+Normal Traffic
+
+10,000 users
+      |
+      v
+   Web Server
+      |
+    Responds
+
+
+DDoS Attack
+
+10 million requests/sec
+        |
+        v
+   Web Server
+        |
+     Overloaded
+```
+
+Legitimate users experience:
+
+- Slow responses
+- Timeouts
+- Service outages
+
+---
+
+# Types of DDoS attacks
+
+## 1. Volumetric attacks
+
+Goal: Saturate the network bandwidth.
+
+Examples:
+
+- UDP floods
+- ICMP floods
+- DNS amplification
+
+Characteristics:
+
+- Massive traffic volume
+- Measured in Gbps or Tbps
+
+---
+
+## 2. Protocol attacks
+
+Target weaknesses in network protocols or connection handling.
+
+Examples:
+
+- SYN floods
+- TCP connection exhaustion
+
+Instead of consuming bandwidth, these attacks exhaust server or firewall resources.
+
+---
+
+## 3. Application-layer attacks (Layer 7)
+
+Target the application itself.
+
+Examples:
+
+```http
+GET /search?q=laptop
+```
+
+or
+
+```http
+POST /login
+```
+
+Thousands of expensive requests per second can overload CPUs, databases, or caches, even with relatively low bandwidth.
+
+These are often the hardest attacks to distinguish from legitimate traffic.
+
+---
+
+# High-level architecture
+
+```text
+                    Internet
+                        |
+                 DDoS Protection
+                        |
+                      CDN
+                        |
+                      WAF
+                        |
+                 Load Balancer
+                        |
+          +-------------+-------------+
+          |             |             |
+      Web Server    Web Server    Web Server
+          |             |             |
+          +-------------+-------------+
+                        |
+                    Cache/Database
+```
+
+Each layer absorbs or filters malicious traffic before it reaches the application.
+
+---
+
+# Prevention techniques
+
+## 1. Content Delivery Network (CDN)
+
+A CDN serves static content from edge locations around the world.
+
+Benefits:
+
+- Absorbs large traffic spikes
+- Reduces origin server load
+- Distributes traffic geographically
+
+If attackers request static assets, edge servers often handle the requests without contacting the origin.
+
+---
+
+## 2. DDoS protection service
+
+Specialized providers operate large global networks capable of absorbing and filtering attack traffic before forwarding legitimate requests.
+
+Capabilities include:
+
+- Traffic scrubbing
+- Anycast routing
+- Automatic attack detection
+- Rate-based filtering
+
+---
+
+## 3. Rate limiting
+
+Limit how many requests a client can make.
+
+Example:
+
+```text
+100 requests/minute/IP
+```
+
+If exceeded:
+
+```http
+429 Too Many Requests
+```
+
+Common algorithms:
+
+- Token Bucket
+- Leaky Bucket
+- Sliding Window
+
+Rate limiting is especially effective against Layer 7 attacks.
+
+---
+
+## 4. Load balancing
+
+Distribute requests across multiple servers.
+
+```text
+             Load Balancer
+          /        |        \
+      Server1   Server2   Server3
+```
+
+Benefits:
+
+- Prevents a single server from becoming a bottleneck
+- Improves availability
+- Supports horizontal scaling
+
+---
+
+## 5. Auto-scaling
+
+Automatically add servers during traffic spikes.
+
+```text
+Traffic Spike
+
+↓
+
+Auto Scaling
+
+↓
+
+More Servers
+```
+
+Auto-scaling helps with legitimate surges and moderate attacks but **cannot withstand unlimited attack traffic on its own**.
+
+---
+
+## 6. Web Application Firewall (WAF)
+
+A WAF analyzes HTTP requests and blocks suspicious patterns.
+
+Examples:
+
+- SQL injection attempts
+- Cross-site scripting (XSS)
+- Requests from known malicious IPs
+- Abnormal request rates
+
+---
+
+## 7. Caching
+
+Serve frequently requested data from cache instead of repeatedly hitting databases or application servers.
+
+```text
+User
+
+↓
+
+Cache
+
+↓
+
+Application (only on cache miss)
+```
+
+Caching reduces the cost of repeated requests.
+
+---
+
+## 8. Traffic filtering
+
+Filter based on:
+
+- IP reputation
+- Geographic origin (when appropriate)
+- User-Agent patterns
+- Known bot signatures
+- Network behavior
+
+Suspicious traffic can be blocked or challenged before reaching the application.
+
+---
+
+## 9. CAPTCHAs and bot detection
+
+For endpoints like login or signup:
+
+```text
+User
+
+↓
+
+CAPTCHA
+
+↓
+
+Application
+```
+
+This makes automated attacks more expensive while allowing human users to proceed.
+
+---
+
+# Monitoring and detection
+
+Monitor metrics such as:
+
+- Requests per second (RPS)
+- Bandwidth usage
+- Error rates
+- Latency
+- CPU and memory utilization
+- Active connections
+- Geographic traffic distribution
+
+Anomalies such as sudden spikes or traffic from unexpected regions can trigger alerts and mitigation.
+
+---
+
+# Trade-offs
+
+| Technique               | Advantages                                        | Limitations                                     |
+| ----------------------- | ------------------------------------------------- | ----------------------------------------------- |
+| CDN                     | Excellent for static content, global distribution | Doesn't fully protect dynamic endpoints         |
+| Rate limiting           | Simple and effective against abuse                | May affect legitimate high-volume clients       |
+| Load balancing          | Improves scalability and availability             | Doesn't block malicious traffic                 |
+| Auto-scaling            | Handles traffic growth                            | Can increase costs during attacks               |
+| WAF                     | Filters many application-layer attacks            | Cannot stop very large volumetric attacks alone |
+| DDoS protection service | Best defense against large attacks                | Additional cost and operational dependency      |
+
+---
+
+# Security / observability
+
+- Maintain real-time dashboards for traffic volume, request rates, and error rates.
+- Set alerts for unusual spikes in RPS, bandwidth, or connection counts.
+- Collect logs from CDNs, WAFs, load balancers, and application servers for correlation.
+- Use distributed tracing to identify bottlenecks during Layer 7 attacks.
+- Regularly test incident response and DDoS mitigation procedures.
+
+---
+
+# Interview-ready summary
+
+> **A DDoS attack attempts to make a service unavailable by overwhelming it with traffic from many distributed machines. I would defend against it using multiple layers: a CDN and dedicated DDoS protection service to absorb and filter traffic, a WAF to block malicious HTTP requests, rate limiting to control abusive clients, load balancing and auto-scaling for resilience, caching to reduce backend load, and continuous monitoring to detect and respond to attacks quickly. This defense-in-depth approach protects against volumetric, protocol, and application-layer DDoS attacks.**
+
 ## Question 6. What is token-based authentication vs session-based?
 
 ## Question 7. How do you design a system for GDPR compliance?

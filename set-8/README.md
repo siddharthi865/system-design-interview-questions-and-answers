@@ -1493,6 +1493,338 @@ Now:
 
 ## Question 5. How do you design a system with WebRTC support?
 
+# Direct answer
+
+Designing a **WebRTC-enabled system** involves building a real-time communication platform where peers exchange **audio, video, and/or data directly** whenever possible. The main challenge is **connection establishment**, not media transmission. A production system typically includes a **signaling service**, **STUN servers** for NAT discovery, **TURN servers** as a relay fallback, and optional media servers (SFU/MCU) for group calls.
+
+---
+
+# 1. Requirements / Problem framing
+
+### Functional requirements
+
+- One-to-one audio/video calls
+- Group video conferencing
+- Screen sharing
+- Data channels (chat, file transfer)
+- Mute/unmute, camera on/off
+- Call setup and teardown
+- Recording (optional)
+
+### Non-functional requirements
+
+- End-to-end latency < 200 ms
+- High availability
+- NAT/firewall traversal
+- Support millions of concurrent users
+- Secure communication
+- Graceful handling of network changes
+
+---
+
+# 2. High-level architecture
+
+```text
+                 +----------------------+
+                 |   Web/Mobile Client  |
+                 +----------+-----------+
+                            |
+                     WebSocket/HTTPS
+                            |
+                            v
+                 +----------------------+
+                 |  Signaling Service   |
+                 +----------+-----------+
+                            |
+          Exchange SDP + ICE Candidates
+                            |
+        +-------------------+------------------+
+        |                                      |
+        v                                      v
+ +---------------+                     +---------------+
+ | STUN Server   |                     | TURN Server   |
+ +---------------+                     +---------------+
+        |                                      |
+        +---------------+----------------------+
+                        |
+                WebRTC Peer Connection
+                        |
+        +---------------+----------------+
+        |                                |
+        v                                v
+   Peer A                          Peer B
+```
+
+---
+
+# 3. Components
+
+## Client
+
+Responsible for:
+
+- Capturing microphone/camera
+- Encoding media
+- ICE candidate gathering
+- Encryption (DTLS/SRTP)
+- Rendering remote media
+
+---
+
+## Signaling Server
+
+WebRTC **does not define signaling**. Your application must implement it.
+
+Responsibilities:
+
+- User discovery
+- Call invitations
+- Exchange SDP offers/answers
+- Exchange ICE candidates
+- Authentication
+- Presence
+
+Common protocols:
+
+- WebSocket
+- gRPC
+- HTTPS
+
+The signaling server is **only used during connection setup** and usually isn't in the media path.
+
+---
+
+## STUN Server
+
+Determines the client's **public IP address and port** behind a NAT.
+
+Example:
+
+```text
+Private:
+192.168.1.20
+
+↓
+
+Public:
+203.0.113.10:55000
+```
+
+If direct peer-to-peer connectivity is possible, media flows directly.
+
+---
+
+## TURN Server
+
+When direct connectivity fails (e.g., restrictive NATs or firewalls), media is relayed through a TURN server.
+
+```text
+Peer A
+
+↓
+
+TURN Server
+
+↓
+
+Peer B
+```
+
+TURN increases latency and bandwidth costs but improves connectivity.
+
+---
+
+## Media Server (Optional)
+
+For large meetings, routing media through a server is more scalable than every participant sending streams to every other participant.
+
+### SFU (Selective Forwarding Unit)
+
+```text
+        SFU
+      /  |  \
+     /   |   \
+    A    B    C
+```
+
+- Receives streams
+- Forwards selected streams
+- Does **not** decode or mix media
+- Low CPU usage
+- Most common choice
+
+### MCU (Multipoint Control Unit)
+
+```text
+A --->
+
+B ---> MCU ---> Mixed Stream
+
+C --->
+```
+
+- Decodes
+- Mixes streams
+- Re-encodes a single output
+- High CPU cost
+- Useful for legacy devices or recording
+
+---
+
+# 4. Call setup flow
+
+```text
+Caller                 Signaling              Callee
+  |                         |                    |
+  |------Offer (SDP)------->|                    |
+  |                         |------Offer-------> |
+  |                         |                    |
+  |<-----Answer-------------|<-----Answer------- |
+  |                         |                    |
+  |<==== ICE Candidates exchanged ==========>    |
+  |                         |                    |
+  |------ Direct Media (SRTP) -----------------> |
+```
+
+Steps:
+
+1. Caller creates an SDP offer.
+2. Offer is sent via the signaling server.
+3. Callee returns an SDP answer.
+4. ICE candidates are exchanged.
+5. Connectivity checks run.
+6. A direct path is established if possible.
+7. Media starts flowing over SRTP.
+
+---
+
+# 5. Scaling strategy
+
+## Scale signaling independently
+
+The signaling service is stateless.
+
+```text
+          Load Balancer
+                 |
+      +----------+----------+
+      |          |          |
+ Signaling1 Signaling2 Signaling3
+```
+
+Store session metadata in Redis or another distributed store if needed.
+
+---
+
+## Global TURN deployment
+
+TURN servers consume significant bandwidth.
+
+Deploy them in multiple regions:
+
+```text
+India → Mumbai TURN
+
+Europe → Frankfurt TURN
+
+US → Virginia TURN
+```
+
+This minimizes relay latency.
+
+---
+
+## SFU clustering
+
+For conferences:
+
+```text
+Conference
+      |
+   Load Balancer
+      |
+  +---+---+
+  |       |
+SFU1    SFU2
+```
+
+Distribute rooms across SFUs, and scale horizontally as rooms grow.
+
+---
+
+# 6. Capacity / sizing
+
+Assume:
+
+- 100,000 concurrent users
+- 10,000 active calls
+- 2 Mbps HD video stream
+
+### Pure P2P (1:1)
+
+Server bandwidth is mostly signaling plus TURN traffic when needed.
+
+### TURN usage
+
+If 20% of calls require relaying:
+
+```text
+2 Mbps × 2 directions × 2,000 calls
+≈ 8 Gbps relay bandwidth
+```
+
+TURN capacity planning is critical because relay traffic grows quickly.
+
+### Group calls
+
+For an `N`-participant full mesh, each client sends `N-1` streams, which doesn't scale well. An SFU reduces client upload to one stream while forwarding to all participants.
+
+---
+
+# 7. Security / Observability
+
+### Security
+
+- Authenticate users before signaling.
+- Encrypt signaling with TLS.
+- Encrypt media with **DTLS-SRTP** (mandatory in WebRTC).
+- Validate ICE candidates.
+- Rate-limit signaling APIs to prevent abuse.
+
+### Observability
+
+Track:
+
+- Call setup success rate
+- ICE connection failures
+- TURN usage percentage
+- End-to-end latency
+- Packet loss
+- Jitter
+- Bitrate
+- Call duration
+- SFU CPU and bandwidth
+
+Use distributed tracing for signaling and collect WebRTC client metrics for troubleshooting.
+
+---
+
+# 8. Trade-offs
+
+| Choice    | Pros                                 | Cons                                              |
+| --------- | ------------------------------------ | ------------------------------------------------- |
+| P2P       | Lowest latency, no media server cost | Doesn't scale beyond small calls                  |
+| TURN      | Works behind restrictive NATs        | Higher latency and bandwidth cost                 |
+| SFU       | Scales well, low server CPU          | Each participant still downloads multiple streams |
+| MCU       | One mixed stream for clients         | Very CPU-intensive and higher latency             |
+| Full Mesh | Simple architecture                  | O(N²) connections; impractical for larger groups  |
+
+---
+
+# Interview-ready summary
+
+> **A WebRTC system consists of clients, a signaling service, STUN/TURN servers, and optionally media servers such as SFUs. The signaling server exchanges SDP offers, answers, and ICE candidates but is not in the media path. STUN enables peers to discover their public addresses, while TURN relays media when direct connectivity fails. For one-to-one calls, peer-to-peer communication is preferred. For group calls, an SFU is the standard architecture because it forwards media efficiently without transcoding, providing a good balance between scalability, latency, and infrastructure cost.**
+
 ## Question 6. What is multicast vs unicast vs broadcast?
 
 ## Question 7. How do you design a distributed logging pipeline?

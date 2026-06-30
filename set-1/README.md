@@ -929,6 +929,290 @@ Examples:
 
 ## Question 5. What is the difference between vertical scaling and horizontal scaling?
 
+# Direct answer
+
+**Vertical scaling (Scale Up)** means increasing the resources of a **single machine** (more CPU, RAM, storage).
+
+**Horizontal scaling (Scale Out)** means adding **more machines** and distributing load across them.
+
+Example:
+
+- Vertical Scaling: Upgrade a server from **8 CPUs → 32 CPUs**.
+- Horizontal Scaling: Increase from **1 server → 10 servers** behind a load balancer.
+
+---
+
+# Comparison
+
+| Aspect                        | Vertical Scaling (Scale Up)     | Horizontal Scaling (Scale Out) |
+| ----------------------------- | ------------------------------- | ------------------------------ |
+| Approach                      | Add resources to one machine    | Add more machines              |
+| Example                       | 16 GB RAM → 128 GB RAM          | 1 server → 10 servers          |
+| Complexity                    | Simpler                         | More complex                   |
+| Scalability Limit             | Hardware limit exists           | Much higher limit              |
+| Availability                  | Single point of failure remains | Better fault tolerance         |
+| Cost                          | Expensive at high end           | Often more cost-effective      |
+| Distributed System Challenges | Minimal                         | Significant                    |
+| Typical Usage                 | Small/medium systems            | Large-scale internet systems   |
+
+---
+
+# Vertical Scaling
+
+### Architecture
+
+```text
+Before
+
+Application
+    |
+Database Server
+(8 CPU, 32 GB RAM)
+```
+
+```text
+After
+
+Application
+    |
+Database Server
+(64 CPU, 512 GB RAM)
+```
+
+We are still using **one machine**, just a larger one.
+
+---
+
+## Advantages
+
+### Simplicity
+
+No major architectural changes.
+
+### No distributed-system complexity
+
+Avoids:
+
+- Sharding
+- Replication coordination
+- Distributed transactions
+
+### Easier operations
+
+One server is easier to manage than many servers.
+
+---
+
+## Disadvantages
+
+### Hardware limits
+
+A machine cannot grow forever.
+
+```text
+16 GB RAM
+  ↓
+64 GB RAM
+  ↓
+256 GB RAM
+  ↓
+Eventually hits a limit
+```
+
+### Single point of failure
+
+If the machine crashes:
+
+```text
+Server Down
+    ↓
+Service Down
+```
+
+### Expensive
+
+The cost of high-end hardware grows rapidly.
+
+---
+
+# Horizontal Scaling
+
+### Architecture
+
+```text
+               Load Balancer
+                     |
+      --------------------------------
+      |              |              |
+   Server 1       Server 2       Server 3
+```
+
+Instead of making one machine bigger, we add more machines.
+
+---
+
+## Advantages
+
+### Nearly unlimited growth
+
+```text
+1 Server
+   ↓
+10 Servers
+   ↓
+100 Servers
+   ↓
+1000 Servers
+```
+
+This is how large internet companies scale.
+
+### Better availability
+
+If one server fails:
+
+```text
+Server 1 ❌
+
+Server 2 ✅
+Server 3 ✅
+```
+
+Traffic continues to flow.
+
+### Fault tolerance
+
+Failures affect only part of the system.
+
+---
+
+## Disadvantages
+
+### Increased complexity
+
+Now we need:
+
+- Load balancers
+- Service discovery
+- Distributed caches
+- Replication
+- Sharding
+
+### Consistency challenges
+
+Multiple nodes may have different views of data.
+
+Example:
+
+```text
+User updates profile
+        ↓
+Replica synchronization pending
+```
+
+Some users may temporarily see stale data.
+
+---
+
+# Database Example
+
+## Vertical Scaling Database
+
+```text
+Application
+     |
+ Large Database Server
+```
+
+Increase CPU, RAM, SSD capacity.
+
+Works well initially.
+
+---
+
+## Horizontal Scaling Database
+
+```text
+           Router
+             |
+    -------------------
+    |        |        |
+Shard1   Shard2   Shard3
+```
+
+Data is partitioned across multiple databases.
+
+This supports much larger datasets and traffic.
+
+---
+
+# Real-world examples
+
+### Vertical Scaling
+
+Typical for:
+
+- Early-stage startups
+- Internal tools
+- Small business applications
+
+Example:
+
+- A single PostgreSQL server upgraded as traffic grows.
+
+---
+
+### Horizontal Scaling
+
+Typical for:
+
+- Social networks
+- Search engines
+- Streaming platforms
+- Large e-commerce systems
+
+Examples:
+
+- Google
+- Netflix
+- Amazon
+
+These companies run thousands of servers and rely heavily on horizontal scaling.
+
+---
+
+# When to choose which?
+
+### Choose Vertical Scaling when:
+
+- System is small.
+- Traffic is moderate.
+- Simplicity is important.
+- Fast growth is not expected.
+
+---
+
+### Choose Horizontal Scaling when:
+
+- Traffic is growing rapidly.
+- High availability is required.
+- Fault tolerance is important.
+- Internet-scale growth is expected.
+
+---
+
+# Common interview answer
+
+A strong interview response is:
+
+> Vertical scaling increases the capacity of a single machine by adding more CPU, memory, or storage, while horizontal scaling increases capacity by adding more machines and distributing traffic among them. Vertical scaling is simpler but limited by hardware and retains a single point of failure. Horizontal scaling is more complex because it introduces distributed-system challenges, but it provides significantly better scalability, availability, and fault tolerance. Most large-scale systems prefer horizontal scaling.
+
+---
+
+# Interview-ready summary
+
+> Vertical scaling (scale up) means upgrading a single server's resources, while horizontal scaling (scale out) means adding more servers and distributing load across them. Vertical scaling is simpler but has hardware limits and a single point of failure. Horizontal scaling is more complex but offers better scalability, availability, and fault tolerance, making it the preferred approach for large distributed systems.
+
 ## Question 6. What are the pros and cons of vertical scaling?
 
 ## Question 7. What are the pros and cons of horizontal scaling?

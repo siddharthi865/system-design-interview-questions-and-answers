@@ -1118,6 +1118,178 @@ Replication lag is the delay between writes on a primary database and their prop
 
 ## Question 5. What is write-behind caching?
 
+## Direct answer
+
+**Write-behind caching (write-back caching)** is a caching strategy where **writes are first made to the cache**, and the cache **asynchronously writes them to the underlying database later**.
+
+So instead of:
+
+> Write → DB → Cache
+
+It becomes:
+
+> Write → Cache → (async) → DB
+
+This improves write latency but introduces **temporary inconsistency risk** if the cache fails before persisting to the database.
+
+---
+
+## How it works
+
+1. Client writes data
+2. Cache is updated immediately (fast ACK)
+3. Change is queued in the background
+4. A worker batch-writes updates to the database asynchronously
+
+```text
+Client → Cache (ACK immediately)
+            ↓
+     Write Queue / Buffer
+            ↓
+     Background Writer
+            ↓
+            DB
+```
+
+---
+
+## Key characteristics
+
+### 1. Asynchronous persistence
+
+Database is updated later, not during request time.
+
+### 2. Batched writes
+
+Updates are often:
+
+- grouped
+- deduplicated
+- coalesced (multiple updates merged)
+
+### 3. Eventual consistency
+
+Cache and DB may diverge temporarily.
+
+---
+
+## Why use write-behind caching?
+
+### Advantages
+
+- Very low write latency (fast user response)
+- High throughput (batch DB writes)
+- Reduces DB load significantly
+- Good for write-heavy workloads
+
+### Common use cases
+
+- Analytics counters (views, likes)
+- Session updates
+- Leaderboards
+- Non-critical user preferences
+- High-frequency updates (e.g., gaming stats)
+
+---
+
+## Trade-offs / Risks
+
+| Problem            | Explanation                            |
+| ------------------ | -------------------------------------- |
+| Data loss risk     | Cache crash before flush → lost writes |
+| Stale DB state     | DB lags behind cache                   |
+| Complex recovery   | Need replay logs or persistence layer  |
+| Ordering issues    | Concurrent writes may be reordered     |
+| Consistency issues | Hard to guarantee strict correctness   |
+
+---
+
+## Comparison with other caching strategies
+
+| Strategy                  | Write path               | Consistency | Latency | Use case              |
+| ------------------------- | ------------------------ | ----------- | ------- | --------------------- |
+| Write-through             | Cache + DB synchronously | Strong      | Higher  | critical data         |
+| Write-back (write-behind) | Cache first, DB later    | Eventual    | Low     | high write throughput |
+| Write-around              | DB only, cache on read   | Medium      | Medium  | read-heavy systems    |
+
+---
+
+## Deep design considerations
+
+### 1. Write buffer durability
+
+To avoid data loss, systems often add:
+
+- persistent write queue (disk-backed)
+- WAL (write-ahead log)
+- Kafka/event log instead of memory buffer
+
+---
+
+### 2. Flush strategy to DB
+
+Common triggers:
+
+- time-based (every N seconds)
+- size-based (batch threshold)
+- idle flush
+- priority flush (important keys)
+
+---
+
+### 3. Failure handling
+
+If DB is down:
+
+- cache keeps buffering writes
+- queue grows (risk of memory pressure)
+- backpressure may be applied
+
+If cache crashes:
+
+- buffered writes may be lost unless persisted
+
+---
+
+### 4. Ordering & idempotency
+
+You must ensure:
+
+- last write wins or versioned writes
+- idempotent DB updates
+- conflict resolution strategy (timestamp/version-based)
+
+---
+
+### 5. Read consistency problem
+
+Reads may come from cache:
+
+- show latest value
+  But DB may lag:
+- reporting systems see old data
+
+Fix:
+
+- read-through cache with fallback consistency rules
+- or direct DB reads for critical paths
+
+---
+
+## Real-world analogy
+
+Think of it like:
+
+> “Writing in a notebook first (cache), and later transferring it to the official ledger (database).”
+
+Fast, but you must ensure the notebook doesn’t get lost.
+
+---
+
+## Interview-ready summary
+
+Write-behind caching is a caching strategy where writes are acknowledged immediately at the cache layer and asynchronously persisted to the database. It significantly improves write performance and reduces database load by batching updates, but introduces eventual consistency and potential data loss risks if not paired with durable queues or write-ahead logging. It is best suited for high-throughput, non-critical workloads where latency matters more than immediate persistence guarantees.
+
 ## Question 6. How do you design a strongly consistent distributed cache?
 
 ## Question 7. What is the difference between sync checkpoints and async checkpoints?

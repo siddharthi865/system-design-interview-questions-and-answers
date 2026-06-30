@@ -2007,6 +2007,562 @@ Examples:
 
 ## Question 5. How would you design a rate limiter (like token bucket or leaky bucket)?
 
+# Direct answer
+
+A **rate limiter** controls how many requests a client can make within a given time period to protect services from abuse, overload, or unfair resource usage.
+
+The two most common algorithms are:
+
+- **Token Bucket** – Allows bursts while enforcing an average request rate.
+- **Leaky Bucket** – Smooths traffic by processing requests at a constant rate.
+
+For most APIs (e.g., GitHub, Stripe, AWS), **Token Bucket** is preferred because it balances flexibility with effective rate limiting.
+
+---
+
+# Requirements / Problem framing
+
+## Functional Requirements
+
+- Limit requests per user, API key, IP, or tenant
+- Support configurable limits (e.g., 100 requests/minute)
+- Allow bursts (optional)
+- Return HTTP `429 Too Many Requests` when exceeded
+- Expose remaining quota if desired
+
+## Non-Functional Requirements
+
+- Low latency (<1 ms decision)
+- High throughput
+- Distributed across multiple servers
+- Highly available
+- Consistent enough to prevent significant limit violations
+
+---
+
+# High-level Architecture
+
+```text
+                 Client
+                    |
+              Load Balancer
+                    |
+               API Gateway
+                    |
+             Rate Limiter Service
+                    |
+          -------------------------
+          |                       |
+     Redis Cluster          Local Cache
+                    |
+                Backend APIs
+```
+
+The rate limiter is typically implemented:
+
+- In the API Gateway
+- As middleware
+- As a sidecar/proxy (e.g., Envoy)
+
+---
+
+# Option 1: Token Bucket (Recommended)
+
+## Idea
+
+Each client owns a bucket containing tokens.
+
+```text
+Bucket Capacity = 10 tokens
+
+Refill Rate = 5 tokens/sec
+```
+
+Every request consumes one token.
+
+```text
+Bucket
+
+OOOOOOOOOO
+
+↓
+
+Request
+
+↓
+
+OOOOOOOOO
+```
+
+If no token is available:
+
+```text
+Request
+
+↓
+
+Reject (429)
+```
+
+---
+
+## Refill Process
+
+Tokens are replenished over time.
+
+Example:
+
+```text
+Capacity = 10
+
+Current = 3
+
+Refill = 5/sec
+
+After 1 second
+
+↓
+
+Current = 8
+```
+
+The bucket never exceeds its maximum capacity.
+
+---
+
+## Request Flow
+
+```text
+Receive Request
+
+↓
+
+Lookup Bucket
+
+↓
+
+Refill Tokens
+
+↓
+
+Token Available?
+
+      |
+   Yes | No
+      |
+Consume Token
+      |
+Forward Request
+
+        Reject (429)
+```
+
+---
+
+## Data Model
+
+For each client:
+
+```text
+client_id
+
+tokens_remaining
+
+last_refill_timestamp
+```
+
+---
+
+## Refill Logic
+
+Instead of refilling every second, calculate lazily on each request.
+
+```text
+elapsed = now - last_refill
+
+new_tokens = elapsed × refill_rate
+
+tokens = min(capacity, tokens + new_tokens)
+```
+
+Advantages:
+
+- No background scheduler
+- O(1) work per request
+- Scales well
+
+---
+
+# Option 2: Leaky Bucket
+
+## Idea
+
+Imagine a bucket with a small hole.
+
+Requests enter quickly:
+
+```text
+Incoming
+
+↓↓↓↓↓↓↓↓
+```
+
+But leave at a fixed rate:
+
+```text
+↓
+
+↓
+
+↓
+
+↓
+
+Constant speed
+```
+
+If the bucket fills:
+
+```text
+Incoming
+
+↓
+
+Bucket Full
+
+↓
+
+Drop requests
+```
+
+---
+
+## Characteristics
+
+Example:
+
+```text
+100 requests arrive instantly
+
+↓
+
+Process only
+
+10/sec
+```
+
+Traffic becomes smooth and predictable.
+
+---
+
+# Token Bucket vs Leaky Bucket
+
+| Feature                  | Token Bucket | Leaky Bucket |
+| ------------------------ | ------------ | ------------ |
+| Allows bursts            | ✅ Yes       | ❌ No        |
+| Smooth output            | Partial      | ✅ Yes       |
+| Average rate limiting    | ✅ Yes       | ✅ Yes       |
+| Best for public APIs     | ✅ Yes       | Sometimes    |
+| Best for network shaping | Good         | Excellent    |
+
+---
+
+# Distributed Design
+
+A single application server isn't enough because requests may hit different instances.
+
+```text
+        Client
+           |
+      Load Balancer
+      /     |      \
+   API1   API2   API3
+        |
+     Shared Redis
+```
+
+Redis stores the bucket state for each client.
+
+---
+
+# Atomic Operations
+
+Without atomicity:
+
+```text
+API1 reads 1 token
+
+API2 reads 1 token
+
+↓
+
+Both allow request
+
+↓
+
+Limit exceeded
+```
+
+Solution:
+
+Use an atomic operation (e.g., a Redis Lua script or transactional command sequence):
+
+```text
+Read bucket
+
+↓
+
+Refill
+
+↓
+
+Consume token
+
+↓
+
+Write bucket
+
+(All atomically)
+```
+
+---
+
+# Redis Schema
+
+```text
+Key:
+
+rate:user123
+```
+
+Value:
+
+```text
+tokens = 8
+
+last_refill = timestamp
+```
+
+TTL:
+
+```text
+Expire after inactivity
+
+e.g. 1 hour
+```
+
+Inactive users are cleaned up automatically.
+
+---
+
+# Handling Multiple Limits
+
+Many APIs enforce several limits simultaneously.
+
+Example:
+
+```text
+User
+
+100/minute
+
+1000/day
+
+10/second
+```
+
+Each request checks all applicable buckets.
+
+```text
+If any bucket fails
+
+↓
+
+Reject request
+```
+
+---
+
+# Sliding Window Alternative
+
+Another popular approach uses timestamps.
+
+```text
+Last Requests
+
+10:01:01
+
+10:01:05
+
+10:01:08
+
+10:01:20
+```
+
+For each request:
+
+```text
+Remove timestamps older than window
+
+↓
+
+Count remaining
+
+↓
+
+Allow or reject
+```
+
+### Pros
+
+- Very accurate
+- No burst at window boundaries
+
+### Cons
+
+- Higher memory usage
+- More expensive than Token Bucket
+
+---
+
+# Failure Handling
+
+### Redis Unavailable
+
+Options:
+
+**Fail Closed**
+
+```text
+Redis down
+
+↓
+
+Reject requests
+```
+
+Protects backend but impacts availability.
+
+---
+
+**Fail Open**
+
+```text
+Redis down
+
+↓
+
+Allow requests
+```
+
+Improves availability but risks overload.
+
+Many systems choose based on endpoint criticality.
+
+---
+
+### Local Fallback
+
+Maintain a small in-memory bucket.
+
+```text
+Redis unavailable
+
+↓
+
+Temporary local limits
+
+↓
+
+Recover later
+```
+
+---
+
+# Scalability
+
+### Horizontal Scaling
+
+```text
+Redis Cluster
+
+Shard by:
+
+hash(client_id)
+```
+
+Each user's bucket lives on one shard.
+
+---
+
+### Caching
+
+For extremely high throughput:
+
+```text
+Redis
+
+↓
+
+Local Token Cache
+
+↓
+
+Periodic Sync
+```
+
+This reduces Redis traffic but allows slight inaccuracies.
+
+---
+
+# Security / Observability
+
+### Security
+
+Rate limits can be applied by:
+
+- User ID
+- API key
+- IP address
+- OAuth client
+- Tenant
+- Endpoint
+
+Different limits can be configured for premium users or internal services.
+
+---
+
+### Observability
+
+Monitor:
+
+- Requests allowed
+- Requests rejected (429s)
+- Redis latency
+- Bucket utilization
+- Top throttled users
+- Redis errors
+- Per-endpoint throttling rate
+
+---
+
+# Trade-offs
+
+| Approach          | Advantages                         | Disadvantages                                  |
+| ----------------- | ---------------------------------- | ---------------------------------------------- |
+| Token Bucket      | Allows bursts, simple, widely used | Traffic isn't perfectly smooth                 |
+| Leaky Bucket      | Constant processing rate           | Doesn't accommodate bursty workloads well      |
+| Fixed Window      | Easy to implement                  | Boundary problem (bursts at window edges)      |
+| Sliding Window    | Accurate and fair                  | More memory and computation                    |
+| Distributed Redis | Shared global limits               | Additional network hop and Redis dependency    |
+| Local In-Memory   | Very fast                          | Doesn't enforce global limits across instances |
+
+---
+
+# Interview-ready summary
+
+> **I would implement a distributed Token Bucket rate limiter because it supports burst traffic while enforcing a configurable average request rate. Each user has a bucket with a fixed capacity and refill rate. On every request, the system lazily refills tokens based on elapsed time, atomically consumes a token using Redis, and returns HTTP 429 if no tokens remain. For a distributed deployment, bucket state is stored in a sharded Redis cluster with atomic Lua scripts to avoid race conditions. For workloads that require perfectly smooth traffic, such as network shaping, I'd choose a Leaky Bucket instead. The design can be extended with multiple limits (per second, per minute, per day), local caching for performance, and comprehensive monitoring of throttling metrics.**
+
 ## Question 6. What is a sticky session, and when should you avoid it?
 
 ## Question 7. How do you design multi-region support for an e-commerce system?

@@ -833,6 +833,160 @@ API compatibility is ensured by designing APIs to evolve safely through versioni
 
 ## Question 5. What is the CAP theorem trade-off for DynamoDB?
 
+## **Direct answer**
+
+Amazon DynamoDB is designed to prioritize **Availability and Partition Tolerance (AP)** under the CAP theorem for most operations, while offering **tunable consistency** (eventual consistency by default, with optional strong consistency for reads within a region). It does **not provide full global strong consistency across partitions/regions in the CAP sense**, but it can offer **strongly consistent reads in a single region** with trade-offs in latency and availability.
+
+---
+
+## **CAP theorem framing (quick recap)**
+
+CAP theorem states that in the presence of a **network partition (P)**, a distributed system must choose between:
+
+| Property                | Meaning                                           |
+| ----------------------- | ------------------------------------------------- |
+| Consistency (C)         | All nodes see the same latest data                |
+| Availability (A)        | Every request gets a response (even if stale)     |
+| Partition Tolerance (P) | System continues operating despite network splits |
+
+👉 In real distributed systems, **P is non-negotiable**, so the real trade-off is:
+
+> **Consistency vs Availability during partitions**
+
+---
+
+## **DynamoDB’s CAP positioning**
+
+### 1. **Primary mode: AP (Availability + Partition Tolerance)**
+
+DynamoDB is built for:
+
+- Always responding to requests
+- Surviving node, AZ, and partial network failures
+- Scaling horizontally without coordination bottlenecks
+
+So for most reads:
+
+- Uses **eventual consistency**
+- Replicates data asynchronously across partitions/AZs
+
+👉 This ensures:
+
+> High availability even under failures or network partitions
+
+---
+
+### 2. **Optional mode: Strong consistency (within a region)**
+
+DynamoDB supports:
+
+- **Strongly consistent reads**
+- But only within a **single region**
+
+This changes behavior to:
+
+- Reads wait for latest committed write
+- Higher latency
+- Reduced availability under certain failure scenarios
+
+👉 So for strongly consistent reads, DynamoDB temporarily leans toward:
+
+> **CP-like behavior (Consistency + Partition tolerance)** within region boundaries
+
+---
+
+## **How DynamoDB achieves this under the hood**
+
+### Storage model:
+
+- Data is partitioned by **partition key**
+- Each partition is replicated across multiple nodes/AZs
+- Writes are propagated asynchronously (eventual consistency)
+
+### Read paths:
+
+| Type                       | Behavior                                      |
+| -------------------------- | --------------------------------------------- |
+| Eventually consistent read | May return stale replica                      |
+| Strongly consistent read   | Reads from quorum/leader ensuring latest data |
+
+---
+
+## **Important nuance (interview-critical)**
+
+DynamoDB is **not purely AP or CP**.
+
+Instead it is:
+
+> **AP by default with configurable consistency trade-offs**
+
+Because:
+
+- In partitions → it prioritizes availability
+- But allows consistency tuning per request
+
+---
+
+## **Failure scenario analysis**
+
+### Network partition between replicas:
+
+#### Eventual consistency (default):
+
+- System continues serving reads/writes
+- Some nodes may return stale data
+- ✔ Available
+- ✘ Not immediately consistent
+
+#### Strong consistency:
+
+- Must ensure latest write is visible
+- May block or fail reads during partition
+- ✔ Consistent
+- ✘ Reduced availability
+
+---
+
+## **Trade-off summary**
+
+| Dimension           | DynamoDB behavior                         |
+| ------------------- | ----------------------------------------- |
+| Availability        | Very high (core design goal)              |
+| Consistency         | Eventual by default, optional strong      |
+| Partition tolerance | Fully supported                           |
+| Latency             | Low for eventual, higher for strong reads |
+| Global consistency  | Not truly CP globally                     |
+
+---
+
+## **Why AWS chose this model**
+
+DynamoDB is optimized for:
+
+- Massive scale
+- Always-on applications (shopping carts, gaming, IoT)
+- Low operational overhead
+
+So AWS prioritizes:
+
+> “The system must always respond” over “every read must be perfectly up-to-date”
+
+---
+
+## **Comparison with CP systems (e.g., traditional databases)**
+
+| System                            | CAP Bias     | Behavior under partition                    |
+| --------------------------------- | ------------ | ------------------------------------------- |
+| DynamoDB                          | AP (default) | Keeps serving data, may be stale            |
+| Zookeeper / etcd                  | CP           | May reject requests to maintain correctness |
+| Traditional RDBMS (single leader) | CP-ish       | May become unavailable on failover          |
+
+---
+
+## **Interview-ready summary**
+
+DynamoDB is primarily an AP system in CAP terms, designed for high availability and partition tolerance with eventual consistency as the default. It provides optional strongly consistent reads within a region, which temporarily shifts behavior toward consistency at the cost of higher latency and reduced availability during failures. Overall, it trades strict global consistency for scalability, resilience, and always-on availability.
+
 ## Question 6. How would you design a read-heavy blog site?
 
 ## Question 7. What is the role of event loops in system performance?

@@ -1725,6 +1725,487 @@ Monitor:
 
 ## Question 5. What is a vector clock and how is it used in conflict resolution?
 
+# Direct answer
+
+A **vector clock** is a mechanism used in distributed systems to determine the **causal relationship** between events. Unlike a physical timestamp, a vector clock can tell whether:
+
+- One event **happened before** another.
+- Two events happened **concurrently** (independently).
+
+This makes vector clocks extremely useful for **conflict detection and resolution** in eventually consistent distributed databases like Amazon's **Dynamo**, Apache Cassandra (earlier versions), and Riak.
+
+---
+
+# Why Do We Need Vector Clocks?
+
+In distributed systems, clocks on different machines are never perfectly synchronized.
+
+Consider two replicas:
+
+```text
+Replica A             Replica B
+
+Update X
+                    Update Y
+```
+
+Both updates occur around the same time.
+
+Using timestamps:
+
+```
+X = 10:00:01
+
+Y = 10:00:00
+```
+
+Which one is newer?
+
+Because clocks can drift, timestamps may be misleading.
+
+The real question is:
+
+> **Did one update happen after the other, or were they independent?**
+
+Vector clocks answer exactly this.
+
+---
+
+# How a Vector Clock Works
+
+Each node maintains a counter.
+
+For three replicas:
+
+```text
+A
+B
+C
+```
+
+A vector clock is:
+
+```text
+[A, B, C]
+```
+
+Example:
+
+```text
+[2, 5, 1]
+```
+
+Meaning:
+
+- A has performed 2 updates
+- B has performed 5 updates
+- C has performed 1 update
+
+---
+
+# Updating a Vector Clock
+
+Suppose we start with:
+
+```text
+A: [0,0,0]
+
+B: [0,0,0]
+
+C: [0,0,0]
+```
+
+---
+
+### Step 1: A Updates
+
+A increments its own counter.
+
+```text
+A
+
+[1,0,0]
+```
+
+---
+
+### Step 2: A Replicates to B
+
+B receives the update.
+
+It merges by taking the element-wise maximum:
+
+```text
+max(
+
+[0,0,0]
+
+[1,0,0]
+
+)
+
+=
+
+[1,0,0]
+```
+
+---
+
+### Step 3: B Performs Another Update
+
+B increments its own entry.
+
+```text
+[1,1,0]
+```
+
+Now B's version clearly happened after A's original version.
+
+---
+
+# Comparing Vector Clocks
+
+Suppose we have:
+
+```
+V1 = [2,1,0]
+
+V2 = [3,2,0]
+```
+
+Compare each element:
+
+```
+2 ≤ 3
+
+1 ≤ 2
+
+0 ≤ 0
+```
+
+At least one value is strictly smaller, and none are larger.
+
+Therefore:
+
+```
+V1 happened before V2
+```
+
+---
+
+Now compare:
+
+```
+V1 = [2,4,1]
+
+V2 = [3,2,2]
+```
+
+Comparison:
+
+```
+2 < 3
+
+4 > 2
+
+1 < 2
+```
+
+Some elements are larger and some smaller.
+
+Neither vector dominates the other.
+
+These updates are **concurrent**.
+
+---
+
+# Conflict Detection
+
+Suppose two users edit the same document offline.
+
+```
+Replica A
+
+Document = "Hello"
+
+↓
+
+Hello Alice
+```
+
+Vector:
+
+```
+[2,0]
+```
+
+---
+
+Meanwhile
+
+```
+Replica B
+
+Hello Bob
+```
+
+Vector:
+
+```
+[0,2]
+```
+
+When synchronization occurs:
+
+```
+[2,0]
+
+vs
+
+[0,2]
+```
+
+Neither happened after the other.
+
+Result:
+
+```
+Conflict Detected
+```
+
+---
+
+# Conflict Resolution
+
+Once a conflict is detected, several strategies are possible.
+
+## 1. Last Write Wins (LWW)
+
+Choose the newest timestamp.
+
+```
+Update A
+
+Update B
+
+↓
+
+Newest timestamp wins
+```
+
+Pros:
+
+- Simple
+
+Cons:
+
+- Can silently lose valid updates.
+
+---
+
+## 2. Application Merge
+
+Merge both versions.
+
+Example:
+
+```
+Hello Alice
+
++
+
+Hello Bob
+
+↓
+
+Hello Alice Bob
+```
+
+Useful for collaborative editing.
+
+---
+
+## 3. User Resolution
+
+Keep both versions.
+
+```
+Version A
+
+Version B
+```
+
+Ask the user which to keep.
+
+---
+
+## 4. CRDTs (Conflict-Free Replicated Data Types)
+
+Some data structures merge automatically.
+
+Example:
+
+```
+Shopping Cart
+
+Replica A
+
+Apple
+
+Replica B
+
+Orange
+
+↓
+
+Merged
+
+Apple
+Orange
+```
+
+No conflict is exposed to the user.
+
+---
+
+# Example: Amazon Dynamo
+
+Dynamo stores multiple versions of an object.
+
+```
+Key
+
+↓
+
+Version 1
+
+Vector Clock
+```
+
+After concurrent updates:
+
+```
+Version A
+
+[3,2]
+
+Version B
+
+[2,4]
+```
+
+Because neither dominates:
+
+```
+Return Both Versions
+
+↓
+
+Application merges
+
+↓
+
+Write merged version
+```
+
+This preserves all updates until the conflict is resolved.
+
+---
+
+# Deep Design Considerations
+
+## Advantages
+
+- Detects causal relationships.
+- Identifies concurrent updates.
+- Doesn't rely on synchronized clocks.
+- Prevents accidental overwriting of independent changes.
+
+---
+
+## Limitations
+
+### Metadata Growth
+
+For **N replicas**, the vector contains **N counters**.
+
+```
+100 nodes
+
+↓
+
+100 integers per object
+```
+
+This can become expensive in large clusters.
+
+---
+
+### Dynamic Membership
+
+When nodes are added or removed:
+
+```
+Node D joins
+
+↓
+
+Vector becomes
+
+[A,B,C,D]
+```
+
+Managing changing membership increases complexity.
+
+---
+
+### Storage Overhead
+
+Every object carries its vector clock.
+
+```
+Object
+
++
+
+Vector
+
+↓
+
+Larger metadata
+```
+
+Some systems prune or compress vector clocks to reduce overhead.
+
+---
+
+# Vector Clock vs. Physical Timestamp
+
+| Feature                      | Physical Timestamp | Vector Clock                  |
+| ---------------------------- | ------------------ | ----------------------------- |
+| Requires synchronized clocks | Yes                | No                            |
+| Detects causality            | No                 | Yes                           |
+| Detects concurrent updates   | No                 | Yes                           |
+| Metadata size                | Small              | Grows with number of replicas |
+| Conflict detection           | Weak               | Strong                        |
+
+---
+
+# Trade-offs
+
+| Approach            | Advantages                    | Disadvantages                                 |
+| ------------------- | ----------------------------- | --------------------------------------------- |
+| Physical timestamps | Simple, low overhead          | Cannot reliably detect concurrent updates     |
+| Vector clocks       | Accurate causality tracking   | Metadata grows with cluster size              |
+| Lamport clocks      | Compact and orders events     | Cannot distinguish causality from concurrency |
+| CRDTs               | Automatic conflict resolution | Limited to data types with merge semantics    |
+
+---
+
+# Interview-ready summary
+
+> "A vector clock is a logical clock that tracks causality across replicas by maintaining a counter for each node. When a node updates data, it increments its own counter, and replicas merge clocks by taking the element-wise maximum. If one vector is less than or equal to another in every component, the first update happened before the second. If neither vector dominates, the updates are concurrent, indicating a conflict. Systems like Dynamo use vector clocks to detect these conflicts and then resolve them using application-specific merges, user intervention, or CRDTs. Compared to timestamps, vector clocks provide much more reliable conflict detection because they don't depend on synchronized physical clocks."
+
 ## Question 6. How do you design a low-latency leaderboard system?
 
 ## Question 7. Explain how DNS load balancing works under the hood

@@ -1471,6 +1471,350 @@ A monolithic architecture packages all business functionality into a single depl
 
 ## Question 5. What is service discovery and how does it work?
 
+## Direct answer
+
+**Service discovery** is a mechanism that allows services in a distributed system to **find and communicate with each other dynamically**, without hardcoding IP addresses or hostnames.
+
+It solves the problem that in modern cloud environments, service instances are constantly being created, destroyed, scaled, or moved, causing their IP addresses to change frequently.
+
+---
+
+## Why Service Discovery is Needed
+
+Imagine a microservices system:
+
+```text
+User Service
+Order Service
+Payment Service
+Notification Service
+```
+
+Suppose the Order Service needs to call the Payment Service.
+
+### Without Service Discovery
+
+```text
+Order Service
+     |
+     |--> 10.0.1.5:8080
+```
+
+Problems:
+
+- Payment Service may restart.
+- Kubernetes may create a new instance.
+- Auto-scaling may add more instances.
+- IP addresses change frequently.
+
+Hardcoding addresses becomes impossible at scale.
+
+---
+
+## Basic Idea
+
+Instead of knowing actual IPs, services use a **logical service name**.
+
+```text
+Order Service
+      |
+      |--> Payment Service
+```
+
+A service discovery system translates:
+
+```text
+Payment Service
+      ↓
+10.0.1.5
+10.0.1.8
+10.0.1.12
+```
+
+and returns available instances.
+
+---
+
+## How It Works
+
+### Step 1: Service Registration
+
+When a service starts:
+
+```text
+Payment Service Instance
+        |
+        v
+Service Registry
+```
+
+It registers:
+
+- Service name
+- IP address
+- Port
+- Metadata
+
+Example:
+
+```text
+Service: Payment-Service
+IP: 10.0.1.5
+Port: 8080
+```
+
+---
+
+### Step 2: Health Checks
+
+The registry continuously verifies:
+
+```text
+Is Payment-Service healthy?
+```
+
+If an instance becomes unhealthy:
+
+```text
+Payment-Service @ 10.0.1.5
+      |
+      X Removed
+```
+
+it is removed from the registry.
+
+---
+
+### Step 3: Service Lookup
+
+When Order Service needs Payment Service:
+
+```text
+Order Service
+      |
+      v
+Service Registry
+      |
+      v
+[10.0.1.8, 10.0.1.12]
+```
+
+The registry returns available instances.
+
+---
+
+### Step 4: Request Routing
+
+```text
+Order Service
+      |
+      +--> Payment Instance 1
+      |
+      +--> Payment Instance 2
+```
+
+The caller selects an instance and sends the request.
+
+---
+
+## Architecture
+
+```text
+                  +------------------+
+                  | Service Registry |
+                  +------------------+
+                     ^            ^
+                     |            |
+         Register    |            | Lookup
+                     |            |
++------------+       |      +------------+
+| Payment S1 |-------+      | Order Svc  |
++------------+              +------------+
+
++------------+
+| Payment S2 |
++------------+
+      |
+      +---- Register
+```
+
+---
+
+## Types of Service Discovery
+
+### 1. Client-Side Discovery
+
+The client queries the registry directly.
+
+```text
+Order Service
+      |
+      v
+Service Registry
+      |
+      v
+Payment Instances
+      |
+      v
+Payment Service
+```
+
+Examples:
+
+- Netflix Eureka
+- Consul
+
+#### Advantages
+
+- Less infrastructure
+- Better control over load balancing
+
+#### Disadvantages
+
+- Discovery logic must exist in every client
+
+---
+
+### 2. Server-Side Discovery
+
+The client calls a load balancer or proxy.
+
+```text
+Order Service
+      |
+      v
+Load Balancer
+      |
+      v
+Payment Instances
+```
+
+The load balancer handles service discovery.
+
+Examples:
+
+- Kubernetes Services
+- AWS Elastic Load Balancer
+
+#### Advantages
+
+- Simpler clients
+- Centralized routing
+
+#### Disadvantages
+
+- Additional infrastructure component
+
+---
+
+## Service Discovery in Kubernetes
+
+This is one of the most common interview examples.
+
+Suppose there are three Payment Service pods:
+
+```text
+Payment Pod 1
+Payment Pod 2
+Payment Pod 3
+```
+
+Kubernetes creates a Service:
+
+```text
+payment-service
+```
+
+Order Service simply calls:
+
+```text
+http://payment-service
+```
+
+Kubernetes DNS resolves:
+
+```text
+payment-service
+      ↓
+Available Pods
+```
+
+and load-balances requests automatically.
+
+---
+
+## Popular Service Discovery Systems
+
+| Tool             | Usage                               |
+| ---------------- | ----------------------------------- |
+| Consul           | Service discovery and health checks |
+| etcd             | Configuration and discovery         |
+| Apache ZooKeeper | Coordination and leader election    |
+| Netflix Eureka   | Service registration and discovery  |
+| Kubernetes       | Built-in DNS-based discovery        |
+
+---
+
+## Related Concepts
+
+### Service Registry
+
+Stores service information.
+
+Example:
+
+```text
+Payment Service -> 10.0.1.5
+Order Service   -> 10.0.2.3
+User Service    -> 10.0.3.7
+```
+
+---
+
+### Health Checks
+
+Ensures only healthy instances receive traffic.
+
+```text
+Healthy   -> Available
+Unhealthy -> Removed
+```
+
+---
+
+### Load Balancing
+
+Often works together with service discovery.
+
+```text
+Order Service
+      |
+      v
+Payment Service
+      |
+ +----+----+
+ |         |
+P1        P2
+```
+
+Requests are distributed across instances.
+
+---
+
+## Interview Perspective
+
+When discussing microservices, mention:
+
+> "Because service instances are dynamic and their IP addresses change frequently, we use service discovery. Services register themselves with a registry, periodically send health information, and other services discover healthy instances through the registry. Service discovery can be client-side (Eureka, Consul) or server-side (Kubernetes Services, load balancers)."
+
+This demonstrates understanding of a key distributed systems challenge.
+
+---
+
+## Interview-Ready Summary
+
+Service discovery is a mechanism that enables services to dynamically locate and communicate with each other in a distributed system. Services register their network locations with a service registry, health checks ensure only healthy instances are available, and clients or load balancers query the registry to find service instances. It eliminates hardcoded addresses and is essential for scalable microservices environments where instances are frequently created, destroyed, or moved.
+
 ## Question 6. How do you design an API rate limiter?
 
 ## Question 7. What is CDN (Content Delivery Network) and how does it work?

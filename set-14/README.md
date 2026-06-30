@@ -1187,6 +1187,280 @@ Choosing heartbeat intervals and timeout values requires balancing detection spe
 
 ## Question 5. What is a watchdog timer in reliability?
 
+# What is a watchdog timer in reliability?
+
+## Direct answer
+
+A **watchdog timer (WDT)** is a reliability mechanism that monitors whether a system, process, or service is still functioning correctly. If the monitored component fails to periodically signal ("kick" or "feed") the watchdog within a specified timeout, the watchdog assumes it has become unresponsive and triggers a recovery action, such as restarting the process, rebooting the machine, or initiating failover.
+
+It is widely used in **embedded systems, operating systems, distributed systems, and cloud infrastructure** to recover automatically from hangs or deadlocks.
+
+---
+
+## Why is a watchdog timer needed?
+
+Some failures do not cause a process to crash—they cause it to **hang**.
+
+For example:
+
+- Infinite loop
+- Deadlock
+- Resource starvation
+- Memory corruption
+- Waiting indefinitely on I/O
+
+Without a watchdog:
+
+```text
+Application starts
+
+↓
+
+Deadlock occurs
+
+↓
+
+Application hangs forever
+```
+
+With a watchdog:
+
+```text
+Application starts
+
+↓
+
+Feeds watchdog every 5 sec
+
+↓
+
+Application hangs
+
+↓
+
+Watchdog timeout expires
+
+↓
+
+Restart application
+```
+
+The watchdog detects that the application is no longer making progress.
+
+---
+
+## How a watchdog timer works
+
+1. The watchdog starts with a timeout (e.g., 10 seconds).
+2. The application periodically resets ("feeds") the timer.
+3. As long as the timer is reset before it expires, nothing happens.
+4. If the timer expires, the watchdog performs a recovery action.
+
+```text
+Time →
+
+Feed   Feed   Feed        (No Feed)
+
+|------|------|-------------X Timeout
+
+                      ↓
+
+              Restart service
+```
+
+---
+
+## Types of watchdog timers
+
+### 1. Hardware watchdog
+
+Implemented in hardware (often inside a CPU or microcontroller).
+
+```text
++----------------+
+| CPU            |
+|                |
+|  Feed WDT ---> |
++----------------+
+        │
+        ▼
+Hardware Watchdog
+        │
+Timeout?
+        │
+        ▼
+System Reset
+```
+
+**Advantages**
+
+- Works even if the operating system crashes.
+- Highly reliable.
+- Common in embedded and automotive systems.
+
+---
+
+### 2. Software watchdog
+
+Implemented by another process or service.
+
+Example:
+
+```text
+Supervisor Process
+       │
+Checks heartbeat
+       │
+       ▼
+Application
+```
+
+If the application stops responding, the supervisor restarts it.
+
+Examples include:
+
+- Process supervisors
+- Service managers
+- Container orchestrators
+
+---
+
+## Recovery actions
+
+When a watchdog detects a timeout, it may:
+
+- Restart the process
+- Restart a container
+- Reboot the machine
+- Trigger leader election
+- Switch traffic to a healthy replica
+- Generate alerts and logs
+
+---
+
+## Real-world examples
+
+### Embedded systems
+
+A car's braking controller periodically feeds a hardware watchdog.
+
+If the software freezes:
+
+```text
+Brake Controller
+
+↓
+
+Stops responding
+
+↓
+
+Hardware Watchdog
+
+↓
+
+Reboot Controller
+```
+
+This prevents the controller from remaining permanently stuck.
+
+---
+
+### Cloud services
+
+A monitoring service checks an application every few seconds.
+
+```text
+Health Check
+
+↓
+
+Application healthy?
+
+↓
+
+No
+
+↓
+
+Restart container
+```
+
+This is effectively a software watchdog.
+
+---
+
+### Distributed systems
+
+A leader node periodically sends heartbeats.
+
+If heartbeats stop:
+
+```text
+Leader
+
+(No heartbeat)
+
+↓
+
+Followers detect timeout
+
+↓
+
+Leader election
+```
+
+Although implemented using heartbeats and timeouts rather than a traditional watchdog, the concept is similar: detect lack of progress and initiate recovery.
+
+---
+
+## Watchdog timer vs Heartbeat
+
+| Watchdog Timer                                     | Heartbeat                                    |
+| -------------------------------------------------- | -------------------------------------------- |
+| Monitors a local process or system                 | Monitors another node or service             |
+| Detects hangs or lack of progress                  | Detects remote node failures                 |
+| Usually triggers restart                           | Usually triggers failover or leader election |
+| Common in embedded systems and service supervisors | Common in distributed systems                |
+
+---
+
+## Watchdog timer vs Health check
+
+| Watchdog Timer               | Health Check                                                             |
+| ---------------------------- | ------------------------------------------------------------------------ |
+| Monitors continuous progress | Checks current health/status                                             |
+| Timeout-based                | Request/response based                                                   |
+| Often restarts automatically | May remove the instance from service or alert operators                  |
+| Usually local                | Often performed by external systems like load balancers or orchestrators |
+
+---
+
+## Best practices
+
+- Choose a timeout longer than the application's normal execution time.
+- Feed the watchdog only after completing critical work—not merely because the process is running.
+- Log watchdog-triggered restarts for debugging.
+- Combine watchdogs with health checks, monitoring, and alerting.
+- Avoid overly aggressive timeouts that cause unnecessary restarts.
+
+---
+
+## Trade-offs
+
+| Advantages                  | Disadvantages                                     |
+| --------------------------- | ------------------------------------------------- |
+| Automatic recovery          | Incorrect timeout values can cause false restarts |
+| Detects hangs and deadlocks | Frequent restarts may mask underlying bugs        |
+| Improves availability       | Does not identify the root cause of failures      |
+| Reduces manual intervention | Recovery may temporarily interrupt service        |
+
+---
+
+## Interview-ready summary
+
+> **A watchdog timer is a reliability mechanism that monitors whether a process or system continues to make progress. The monitored component must periodically reset the watchdog before its timeout expires. If it fails to do so—because of a hang, deadlock, or crash—the watchdog automatically triggers recovery actions such as restarting the process or rebooting the system. Hardware watchdogs are common in embedded systems, while software watchdogs are widely used in cloud infrastructure and distributed systems to improve availability and enable self-healing.**
+
 ## Question 6. How do you handle phantom reads in transactions?
 
 ## Question 7. What is a write quorum?

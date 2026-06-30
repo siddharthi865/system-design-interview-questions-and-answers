@@ -1823,6 +1823,442 @@ Store amounts in the smallest currency unit (for example, paise or cents) using 
 
 ## Question 5. How do you design a personal budgeting system?
 
+# Design a Personal Budgeting System (LLD)
+
+## Direct answer
+
+A personal budgeting system helps users **track income and expenses, create budgets, categorize transactions, monitor spending, and generate financial reports**.
+
+At the class diagram level, the design should separate:
+
+- **Account management**
+- **Transaction management**
+- **Budget management**
+- **Category management**
+- **Reporting**
+
+This separation keeps the system modular and allows new budgeting strategies or reporting features to be added easily.
+
+---
+
+# Requirements / Problem Framing
+
+## Functional Requirements
+
+- Create and manage accounts (bank, cash, credit card)
+- Record income and expenses
+- Categorize transactions
+- Create monthly or recurring budgets
+- Track spending against budgets
+- Generate reports and summaries
+- Support recurring transactions
+
+## Non-functional Requirements
+
+- Strong consistency for financial data
+- Auditability
+- Low-latency reads
+- Extensible budgeting rules
+- Secure handling of financial information
+
+---
+
+# Core Class Diagram
+
+```text
+                    +----------------------+
+                    |  BudgetService       |
+                    +----------------------+
+                    | accountRepo          |
+                    | transactionRepo      |
+                    | budgetRepo           |
+                    +----------------------+
+                    | addTransaction()     |
+                    | createBudget()       |
+                    | getBudgetStatus()    |
+                    +----------+-----------+
+                               |
+        ------------------------------------------------
+        |                 |                |            |
+     Account         Transaction        Budget      ReportService
+        |                 |                |
+        |                 |           BudgetRule
+        |                 |                |
+        |             Category      MonthlyBudgetRule
+        |                             WeeklyBudgetRule
+```
+
+---
+
+# Main Classes
+
+## User
+
+```javascript
+class User {
+  constructor(id, name) {
+    this.id = id;
+    this.name = name;
+  }
+}
+```
+
+---
+
+## Account
+
+Represents a financial account.
+
+```javascript
+class Account {
+  constructor(id, name, balance = 0) {
+    this.id = id;
+    this.name = name;
+    this.balance = balance;
+  }
+
+  deposit(amount) {
+    this.balance += amount;
+  }
+
+  withdraw(amount) {
+    if (amount > this.balance) {
+      throw new Error("Insufficient balance");
+    }
+
+    this.balance -= amount;
+  }
+}
+```
+
+---
+
+## Category
+
+Groups transactions.
+
+```javascript
+class Category {
+  constructor(id, name) {
+    this.id = id;
+    this.name = name;
+  }
+}
+```
+
+Examples:
+
+```text
+Food
+Rent
+Travel
+Shopping
+Salary
+Entertainment
+```
+
+---
+
+## Transaction
+
+Represents an immutable financial event.
+
+```javascript
+class Transaction {
+  constructor(id, accountId, amount, category, type, date, description) {
+    this.id = id;
+    this.accountId = accountId;
+    this.amount = amount;
+    this.category = category;
+    this.type = type;
+    this.date = date;
+    this.description = description;
+  }
+}
+```
+
+Transaction types:
+
+```text
+INCOME
+EXPENSE
+TRANSFER
+```
+
+---
+
+# Budget
+
+Represents a spending limit.
+
+```javascript
+class Budget {
+  constructor(category, limit) {
+    this.category = category;
+    this.limit = limit;
+    this.spent = 0;
+  }
+
+  addExpense(amount) {
+    this.spent += amount;
+  }
+
+  remaining() {
+    return this.limit - this.spent;
+  }
+}
+```
+
+---
+
+# Budget Rule
+
+Different users may budget differently.
+
+```javascript
+class BudgetRule {
+  isExceeded(budget) {
+    throw new Error("Implement");
+  }
+}
+```
+
+---
+
+## Monthly Budget Rule
+
+```javascript
+class MonthlyBudgetRule extends BudgetRule {
+  isExceeded(budget) {
+    return budget.spent > budget.limit;
+  }
+}
+```
+
+---
+
+## Weekly Budget Rule
+
+```javascript
+class WeeklyBudgetRule extends BudgetRule {
+  isExceeded(budget) {
+    return budget.spent > budget.limit;
+  }
+}
+```
+
+The evaluation period differs even if the logic is similar.
+
+---
+
+# Report Service
+
+Generates summaries and analytics.
+
+```javascript
+class ReportService {
+  monthlyExpense(transactions) {
+    return transactions
+      .filter((t) => t.type === "EXPENSE")
+      .reduce((sum, t) => sum + t.amount, 0);
+  }
+
+  categoryWiseExpense(transactions) {
+    const report = {};
+
+    for (const t of transactions) {
+      if (t.type !== "EXPENSE") continue;
+
+      report[t.category.name] = (report[t.category.name] || 0) + t.amount;
+    }
+
+    return report;
+  }
+}
+```
+
+---
+
+# Budget Service
+
+Coordinates budgeting operations.
+
+```javascript
+class BudgetService {
+  constructor(accountRepo, transactionRepo, budgetRepo) {
+    this.accountRepo = accountRepo;
+    this.transactionRepo = transactionRepo;
+    this.budgetRepo = budgetRepo;
+  }
+
+  addTransaction(transaction) {
+    this.transactionRepo.save(transaction);
+
+    if (transaction.type === "EXPENSE") {
+      const budget = this.budgetRepo.findByCategory(transaction.category.id);
+
+      if (budget) {
+        budget.addExpense(transaction.amount);
+        this.budgetRepo.save(budget);
+      }
+    }
+  }
+
+  createBudget(budget) {
+    this.budgetRepo.save(budget);
+  }
+}
+```
+
+---
+
+# Repository Layer
+
+```javascript
+class AccountRepository {
+  save(account) {}
+  findById(id) {}
+}
+
+class TransactionRepository {
+  save(transaction) {}
+  findByUser(userId) {}
+}
+
+class BudgetRepository {
+  save(budget) {}
+  findByCategory(categoryId) {}
+}
+```
+
+---
+
+# Sequence Flow
+
+### Recording an Expense
+
+```text
+User
+   |
+   | Add Expense
+   v
+BudgetService
+   |
+   +--> Save Transaction
+   |
+   +--> Update Account Balance
+   |
+   +--> Update Budget
+   |
+   +--> Check Budget Limit
+```
+
+---
+
+### Budget Report
+
+```text
+User
+   |
+   | View Budget
+   v
+BudgetService
+   |
+   +--> Fetch Budgets
+   |
+   +--> Fetch Transactions
+   |
+   +--> ReportService
+   |
+   v
+Budget Summary
+```
+
+---
+
+# Design Considerations
+
+### Immutable Transactions
+
+Never modify historical transactions.
+
+Instead of changing balances directly:
+
+```text
+Balance = ₹25,000
+```
+
+Maintain a transaction ledger:
+
+```text
++₹50,000 Salary
+-₹15,000 Rent
+-₹2,500 Food
+-₹1,200 Fuel
+```
+
+The account balance can be stored as a materialized value for fast access while retaining the ledger for auditing.
+
+---
+
+### Recurring Transactions
+
+Support recurring income and expenses by introducing:
+
+```javascript
+class RecurringTransaction {
+  constructor(template, frequency, nextExecutionDate) {
+    this.template = template;
+    this.frequency = frequency;
+    this.nextExecutionDate = nextExecutionDate;
+  }
+}
+```
+
+A scheduler periodically creates actual `Transaction` objects from these templates.
+
+---
+
+### Budget Alerts
+
+A notification component can monitor thresholds such as:
+
+```text
+80% Budget Used
+100% Budget Exceeded
+```
+
+This keeps notification logic separate from budgeting logic.
+
+---
+
+### Multi-Currency Support
+
+Store:
+
+- Currency code (USD, INR, EUR)
+- Exchange rates
+- Base reporting currency
+
+Never mix currencies directly without conversion.
+
+---
+
+# Design Patterns Used
+
+| Pattern             | Usage                                                  |
+| ------------------- | ------------------------------------------------------ |
+| Strategy            | Different budgeting policies (monthly, weekly, yearly) |
+| Repository          | Data access abstraction                                |
+| Service Layer       | Business orchestration                                 |
+| Observer (optional) | Budget alerts and notifications                        |
+
+---
+
+# Interview-ready Summary
+
+> "I'd model the budgeting system around immutable `Transaction` records, `Account`s for balances, `Budget`s for spending limits, and `Category`s for expense classification. A `BudgetService` coordinates transaction recording and budget updates, while a `ReportService` generates spending insights. Budget evaluation is encapsulated behind a `BudgetRule` strategy, making it easy to support monthly, weekly, or custom budgeting policies. The design keeps financial records auditable, supports recurring transactions and alerts, and cleanly separates business logic from persistence and reporting."
+
 ## Question 6. How do you design a fitness class reservation system?
 
 ## Question 7. How do you design a drone delivery scheduling system?

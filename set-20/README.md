@@ -951,6 +951,307 @@ Role-Based Access Control (RBAC) is an authorization model where **permissions a
 
 ## Question 5. How do you design an attribute-based access control system (ABAC)?
 
+## Direct answer
+
+An **Attribute-Based Access Control (ABAC)** system is designed by evaluating **dynamic policies over attributes of the user, resource, action, and environment** at request time. Instead of fixed roles (like RBAC), ABAC decides access using rules such as:
+
+> “Allow if user.department == resource.department AND request.time is within business hours”
+
+So the core idea is:
+
+> **Access = function(user attributes, resource attributes, action, environment context)**
+
+---
+
+## Requirements / problem framing
+
+### Functional requirements
+
+- Evaluate access dynamically per request
+- Support rich policies (time, location, device, department, risk score, etc.)
+- Support multiple resources and actions (read/write/delete/admin)
+- Centralized policy management
+- Auditable decisions (why access was allowed/denied)
+
+### Non-functional requirements
+
+- Very low latency decision-making (every request)
+- Highly scalable policy evaluation engine
+- Strong consistency of policies
+- Secure policy updates
+- Explainability (critical for audits/compliance)
+
+---
+
+## High-level architecture
+
+### Core components
+
+- **Policy Decision Point (PDP)** → evaluates access rules
+- **Policy Enforcement Point (PEP)** → intercepts requests
+- **Policy Administration Point (PAP)** → manages policies
+- **Policy Information Point (PIP)** → fetches attributes (user/resource/context)
+
+---
+
+### Architecture diagram
+
+```id="abac_arch"
+Client Request
+      |
+      v
++-------------------+
+| PEP (Gateway/API) |
++--------+----------+
+         |
+         v
++-------------------+
+| PDP (Engine)      |  <---- Policy Store (PAP)
+| Evaluate Rules     |
++--------+----------+
+         |
+   +-----+----------------+
+   |                      |
+   v                      v
+PIP (User/Resource)   Attribute DBs
+(User, Dept, Device)  (LDAP, DB, APIs)
+```
+
+---
+
+## How ABAC works (step-by-step)
+
+### 1. Request interception (PEP)
+
+A request comes in:
+
+```id="req1"
+GET /invoice/123
+User: Alice
+Action: READ
+```
+
+PEP intercepts it and forwards to PDP.
+
+---
+
+### 2. Attribute collection (PIP)
+
+System gathers attributes:
+
+**User attributes**
+
+- department = Finance
+- role = Analyst
+- clearance = 3
+
+**Resource attributes**
+
+- invoice.department = Finance
+- sensitivity = high
+
+**Environment attributes**
+
+- time = 10:00 AM
+- IP location = office network
+
+---
+
+### 3. Policy evaluation (PDP)
+
+Policy example:
+
+```text
+ALLOW if:
+  user.department == resource.department
+  AND user.clearance >= resource.sensitivity_level
+  AND request.time within business_hours
+```
+
+Result:
+
+- true → allow
+- false → deny
+
+---
+
+### 4. Enforcement (PEP)
+
+- Allow request OR reject with 403
+
+---
+
+## Policy design model
+
+### 1. Policy structure
+
+A policy typically includes:
+
+- Subject attributes (user)
+- Resource attributes
+- Action
+- Conditions (environmental context)
+
+Example JSON policy:
+
+```json
+{
+  "effect": "allow",
+  "action": "read",
+  "resource": "invoice",
+  "condition": {
+    "user.department": "resource.department",
+    "user.clearance": ">= resource.sensitivity"
+  }
+}
+```
+
+---
+
+### 2. Policy evaluation logic
+
+At runtime:
+
+```id="eval1"
+IF all conditions match → ALLOW
+ELSE → DENY
+```
+
+---
+
+## Deep design considerations
+
+### 1. Policy engine design
+
+Two approaches:
+
+#### A. Rule-based engine
+
+- Simple if/else evaluation
+- Fast but limited complexity
+
+#### B. Expression-based engine (recommended)
+
+- Uses DSL (e.g., OPA/Rego)
+- Supports complex boolean logic
+
+---
+
+### 2. Attribute sources (PIP design)
+
+Attributes may come from:
+
+- LDAP / Identity provider
+- User DB
+- Resource metadata store
+- Device trust system
+- Real-time risk engine
+
+Challenge:
+
+- Latency of fetching attributes
+
+Solution:
+
+- Caching + precomputed attributes
+
+---
+
+### 3. Performance optimization
+
+Since ABAC is evaluated per request:
+
+#### Techniques:
+
+- Cache user attributes (short TTL)
+- Cache policy evaluation results (carefully scoped)
+- Precompute derived attributes (e.g., user risk score)
+- Batch attribute fetching
+
+---
+
+### 4. Policy explosion problem
+
+ABAC avoids role explosion but introduces:
+
+- Too many fine-grained policies
+
+Solution:
+
+- Policy grouping + templates
+- Hierarchical conditions
+- Reusable policy modules
+
+---
+
+### 5. Explainability (critical in interviews)
+
+Every decision should produce:
+
+```text
+ALLOW because:
+- user.department == resource.department
+- user.clearance >= required_level
+```
+
+Useful for:
+
+- audits
+- debugging access issues
+- compliance
+
+---
+
+### 6. Security considerations
+
+- Prevent attribute spoofing
+- Ensure trusted PIP sources only
+- Secure policy updates (RBAC for policy admins)
+- Audit every policy change
+- Encrypt sensitive attributes
+
+---
+
+### 7. Consistency model
+
+Policies must be:
+
+- Strongly consistent (or near-real-time consistent)
+- Otherwise stale policies cause security risks
+
+Trade-off:
+
+- Strong consistency → higher latency
+- Eventual consistency → security risk window
+
+---
+
+## Trade-offs
+
+| Aspect          | RBAC | ABAC                          |
+| --------------- | ---- | ----------------------------- |
+| Simplicity      | High | Medium/Low                    |
+| Flexibility     | Low  | Very high                     |
+| Scalability     | High | High (but complex)            |
+| Performance     | Fast | Slower (attribute evaluation) |
+| Maintainability | Easy | Harder                        |
+
+---
+
+## Real-world usage examples
+
+- AWS IAM policies (hybrid RBAC + ABAC)
+- Kubernetes admission control policies
+- Zero-trust enterprise systems
+- Financial systems (risk-based access control)
+- Google BeyondCorp model
+
+---
+
+## Interview-ready summary
+
+An Attribute-Based Access Control (ABAC) system evaluates access dynamically using attributes of the **user, resource, action, and environment** instead of static roles. It is implemented using a **Policy Enforcement Point (PEP)** that intercepts requests, a **Policy Decision Point (PDP)** that evaluates policies, and a **Policy Information Point (PIP)** that fetches attributes. Policies are expressed as logical rules and evaluated at runtime. ABAC provides highly flexible and fine-grained authorization but introduces complexity in policy management, performance optimization, and explainability.
+
 ## Question 6. How do you prevent data leaks in system logs?
 
 ## Question 7. How do you design a fraud detection pipeline for e-commerce?

@@ -770,6 +770,200 @@ Many messaging systems support DLQs natively or through configuration, including
 
 ## Question 5. What is an append-only log in distributed systems?
 
+# Append-Only Log in Distributed Systems
+
+## Direct answer
+
+An **append-only log** is a data structure where **new records are always added to the end of the log**, and existing records are **never modified or deleted**. Instead of updating data in place, every change is recorded as a new immutable event.
+
+This design is fundamental to many distributed systems because it provides **durability, fault tolerance, replication, recovery, and event ordering**.
+
+---
+
+## How it works
+
+Instead of updating records:
+
+```text
+Balance = 1000
+
+UPDATE Balance = 1200
+```
+
+An append-only log records every change:
+
+```text
+Offset  Event
+------  ---------------------
+0       Account Created
+1       Deposit ₹1000
+2       Withdraw ₹200
+3       Deposit ₹400
+4       Withdraw ₹100
+```
+
+Nothing is overwritten.
+
+The current balance is obtained by replaying the events:
+
+```text
+0 + 1000 - 200 + 400 - 100 = ₹1100
+```
+
+---
+
+## Why use an append-only log?
+
+### 1. Durability
+
+Once an event is written, it remains unchanged.
+
+```text
+Append Event
+      │
+      ▼
+Persist to Disk
+      │
+Never Modified
+```
+
+This reduces the risk of data corruption from in-place updates.
+
+---
+
+### 2. Easy replication
+
+Followers simply copy new log entries in order.
+
+```text
+Leader
+  │
+  ├── Event 101
+  ├── Event 102
+  └── Event 103
+        │
+        ▼
+Followers append the same events
+```
+
+This approach is used by consensus protocols like Raft consensus algorithm.
+
+---
+
+### 3. Crash recovery
+
+If a server crashes:
+
+```text
+Read Log
+   │
+Replay Events
+   │
+Restore State
+```
+
+Since the log is durable, the application can rebuild its state by replaying events.
+
+---
+
+### 4. Event ordering
+
+Every event has a unique position (often called an **offset**).
+
+```text
+Offset
+0
+1
+2
+3
+4
+```
+
+Consumers process events sequentially, ensuring a deterministic order.
+
+---
+
+## Architecture
+
+```text
+Producers
+     │
+     ▼
+Append-Only Log
++----------------------+
+| Event 1              |
+| Event 2              |
+| Event 3              |
+| Event 4              |
++----------------------+
+     │
+     ▼
+Consumers
+```
+
+Multiple consumers can independently read the same log at their own pace.
+
+---
+
+## Real-world examples
+
+Many distributed systems are built around append-only logs:
+
+- Apache Kafka stores messages as immutable log entries.
+- Apache Pulsar uses persistent append-only storage.
+- Apache BookKeeper provides durable append-only logs.
+- Consensus algorithms like Raft consensus algorithm and Paxos replicate state through append-only logs.
+
+---
+
+## Advantages
+
+- High write throughput (sequential disk writes are efficient)
+- Immutable history for auditing
+- Simplifies replication
+- Enables reliable recovery after crashes
+- Preserves event ordering
+- Supports replay and time-travel debugging
+
+---
+
+## Disadvantages
+
+- Logs grow continuously and require retention or compaction policies.
+- Reading the latest state may require replaying many events unless snapshots or materialized views are maintained.
+- Additional storage is needed because old events are retained.
+
+---
+
+## Append-only log vs. traditional database updates
+
+| Aspect            | Append-Only Log               | Traditional Updates                      |
+| ----------------- | ----------------------------- | ---------------------------------------- |
+| Updates           | Add new records               | Modify existing records                  |
+| History           | Complete history retained     | Usually only current state               |
+| Auditability      | Excellent                     | Limited unless audit tables exist        |
+| Recovery          | Replay log                    | Restore from backups or transaction logs |
+| Write performance | Excellent (sequential writes) | Can involve random writes                |
+| Storage           | Higher                        | Lower                                    |
+
+---
+
+## Common use cases
+
+- Event-driven architectures
+- Distributed messaging systems
+- Consensus algorithms
+- Database transaction logs
+- Event sourcing
+- Change Data Capture (CDC)
+- Audit logging
+
+---
+
+## Interview-ready summary
+
+> An append-only log is an immutable sequence of records where new events are always appended and existing records are never modified. This design enables efficient sequential writes, reliable replication, deterministic event ordering, crash recovery through log replay, and complete audit history. It's a foundational concept in distributed systems and is widely used in technologies like Apache Kafka and in consensus protocols such as Raft consensus algorithm.
+
 ## Question 6. Explain optimistic vs pessimistic locking
 
 ## Question 7. What is eventual leader election?

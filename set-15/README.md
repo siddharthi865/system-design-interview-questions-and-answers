@@ -1195,6 +1195,405 @@ In production systems:
 
 ## Question 5. How do you design a secure multi-tenant system?
 
+# How do you design a secure multi-tenant system?
+
+## Direct answer
+
+A **secure multi-tenant system** is one where multiple customers (tenants) share the same application infrastructure while ensuring **complete isolation of data, access, and resources** between tenants.
+
+The key design principles are:
+
+- Strong tenant isolation
+- Authentication and authorization with tenant context
+- Data isolation at the database layer
+- Secure APIs
+- Encryption
+- Comprehensive auditing and monitoring
+
+---
+
+# Requirements / Problem Framing
+
+### Functional Requirements
+
+- Multiple organizations (tenants) use the same application.
+- Users belong to one or more tenants.
+- Each tenant manages its own users, roles, and data.
+- Administrators can manage only their own tenant.
+
+### Non-functional Requirements
+
+- Strong tenant isolation
+- High scalability
+- High availability
+- Low latency
+- Regulatory compliance (e.g., GDPR, HIPAA where applicable)
+
+---
+
+# High-Level Architecture
+
+```text
+                    Internet
+                        |
+                 Load Balancer
+                        |
+                  API Gateway
+                        |
+                Authentication Service
+                        |
+            Extract Tenant Context
+                        |
+                Authorization Service
+                        |
+                 Business Services
+                        |
+          +-------------+-------------+
+          |             |             |
+       User DB      Order DB      Billing DB
+          |             |             |
+      Tenant-aware storage and queries
+```
+
+Every request carries both:
+
+```text
+User Identity
++
+Tenant Identity
+```
+
+The application uses both to authorize access.
+
+---
+
+# Tenant Identification
+
+Each request must identify the tenant.
+
+Common approaches:
+
+### 1. Subdomain
+
+```text
+companyA.example.com
+
+companyB.example.com
+```
+
+---
+
+### 2. URL
+
+```text
+example.com/companyA
+
+example.com/companyB
+```
+
+---
+
+### 3. JWT Claims
+
+```json
+{
+  "userId": 42,
+  "tenantId": "tenant-123",
+  "role": "Admin"
+}
+```
+
+This is the most common approach for APIs.
+
+---
+
+# Authentication
+
+Authenticate users normally using:
+
+- Passwords
+- OAuth
+- SSO (SAML/OIDC)
+- Multi-factor authentication (MFA)
+
+After authentication, issue a token containing:
+
+```text
+User ID
+Tenant ID
+Roles
+Permissions
+Expiration
+```
+
+Every service validates the token before processing requests.
+
+---
+
+# Authorization
+
+Authorization must always include the tenant.
+
+Instead of:
+
+```text
+Can user edit document?
+```
+
+Check:
+
+```text
+Can user edit document
+inside Tenant X?
+```
+
+Example:
+
+```text
+User
+Alice
+
+Tenant A
+
+Can edit
+```
+
+But:
+
+```text
+Alice
+
+Tenant B
+
+Access Denied
+```
+
+Never rely on client-supplied tenant IDs alone; validate them against the authenticated user's tenant memberships.
+
+---
+
+# Data Isolation Strategies
+
+## Option 1: Shared Database, Shared Tables
+
+```text
+Orders
+-------------------------
+tenant_id
+order_id
+amount
+```
+
+Every query filters by:
+
+```sql
+WHERE tenant_id = ?
+```
+
+### Pros
+
+- Lowest cost
+- Easy to scale
+
+### Cons
+
+- Highest risk if queries omit tenant filters
+
+---
+
+## Option 2: Shared Database, Separate Schemas
+
+```text
+TenantA Schema
+
+TenantB Schema
+```
+
+### Pros
+
+- Better isolation
+- Easier backups
+
+### Cons
+
+- More operational complexity
+
+---
+
+## Option 3: Separate Database Per Tenant
+
+```text
+Tenant A DB
+
+Tenant B DB
+
+Tenant C DB
+```
+
+### Pros
+
+- Strongest isolation
+- Independent scaling
+- Simpler compliance
+
+### Cons
+
+- Highest infrastructure cost
+- More operational overhead
+
+---
+
+# Enforcing Tenant Isolation
+
+Every database query must be tenant-scoped.
+
+Instead of:
+
+```sql
+SELECT * FROM Orders
+WHERE order_id = 100;
+```
+
+Use:
+
+```sql
+SELECT *
+FROM Orders
+WHERE tenant_id = ?
+AND order_id = 100;
+```
+
+Better yet, enforce this automatically through an ORM layer or database features such as row-level security, rather than relying solely on developers to remember tenant filters.
+
+---
+
+# Role-Based Access Control (RBAC)
+
+Roles should be tenant-specific.
+
+```text
+Tenant A
+
+Admin
+Manager
+Employee
+```
+
+The same user may have different roles in different tenants.
+
+Example:
+
+```text
+Alice
+
+Tenant A → Admin
+
+Tenant B → Viewer
+```
+
+Authorization decisions should always consider both the **user** and the **tenant**.
+
+---
+
+# Security Considerations
+
+### 1. Encrypt Data
+
+- TLS for data in transit
+- Encryption at rest
+- Encrypt sensitive fields where appropriate
+
+---
+
+### 2. API Security
+
+- Validate JWTs
+- Verify tenant membership
+- Rate limiting
+- Input validation
+- Protect against SQL injection, XSS, and CSRF (for cookie-based authentication)
+
+---
+
+### 3. Secrets Management
+
+Store:
+
+- Database credentials
+- API keys
+- Encryption keys
+
+in a centralized secrets manager rather than application code.
+
+---
+
+### 4. Audit Logging
+
+Log events such as:
+
+```text
+Tenant ID
+User ID
+Action
+Timestamp
+IP Address
+Resource
+```
+
+Example:
+
+```text
+Tenant A
+
+Alice
+
+Deleted Invoice #100
+```
+
+These logs support compliance, investigations, and anomaly detection.
+
+---
+
+### 5. Monitoring
+
+Monitor for:
+
+- Cross-tenant access attempts
+- Repeated authorization failures
+- Suspicious login activity
+- Unusual API usage
+- Excessive data exports
+
+---
+
+# Scalability Considerations
+
+As tenants grow:
+
+- Stateless application servers behind load balancers
+- Cache tenant configuration and permissions
+- Partition large datasets by tenant
+- Isolate "noisy neighbors" with resource quotas
+- Use separate databases for very large or premium tenants if needed
+
+---
+
+# Trade-offs
+
+| Design                    | Advantages                               | Disadvantages                                                                                    |
+| ------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Shared tables             | Lowest cost, simplest deployment         | Greater risk of data leakage if tenant filtering fails                                           |
+| Separate schemas          | Better isolation                         | Increased operational complexity                                                                 |
+| Separate databases        | Strongest isolation, independent scaling | Highest cost and operational overhead                                                            |
+| JWT with tenant claims    | Fast authorization                       | Claims become stale if tenant membership changes; short-lived tokens or revocation may be needed |
+| Centralized authorization | Consistent policy enforcement            | Additional service dependency                                                                    |
+
+---
+
+# Interview-ready Summary
+
+> A secure multi-tenant system isolates each tenant's users and data while sharing application infrastructure. Every request carries authenticated **user** and **tenant** context, authorization is enforced within that tenant, and all database access is tenant-scoped. Depending on isolation requirements, data can be stored in shared tables, separate schemas, or separate databases. Production systems further strengthen security with encryption, RBAC, audit logging, secrets management, monitoring, and automated enforcement mechanisms like row-level security to prevent cross-tenant data leakage.
+
 ## Question 6. What is TLS termination at load balancers?
 
 ## Question 7. How do you secure inter-service communication in microservices?

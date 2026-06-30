@@ -1188,6 +1188,306 @@ This is common in:
 
 ## Question 5. What are the different types of NoSQL databases?
 
+# Direct Answer
+
+NoSQL databases are generally classified into **four major types**:
+
+1. **Key-Value Stores**
+2. **Document Databases**
+3. **Wide-Column (Column-Family) Databases**
+4. **Graph Databases**
+
+Each type is optimized for different access patterns and use cases.
+
+---
+
+# 1. Key-Value Databases
+
+The simplest NoSQL model.
+
+Data is stored as:
+
+```text
+Key -> Value
+```
+
+Example:
+
+```text
+user:123 -> {name: "John", age: 25}
+session:abc -> {...}
+```
+
+Think of it as a distributed hash map.
+
+---
+
+## How It Works
+
+```text
+Application
+     |
+     v
++-------------+
+| Key-Value DB|
++-------------+
+     |
+     +--> user:123
+     +--> cart:456
+```
+
+Lookup is performed using the key.
+
+```text
+GET(user:123)
+```
+
+returns the associated value.
+
+---
+
+## Examples
+
+- Redis
+- Amazon DynamoDB
+- Riak
+
+---
+
+## Use Cases
+
+- Caching
+- Session storage
+- Shopping carts
+- User preferences
+- Rate limiting
+
+---
+
+## Advantages
+
+- Extremely fast
+- Simple to scale
+- High throughput
+
+## Limitations
+
+- Limited querying
+- No joins
+- Access primarily by key
+
+---
+
+# 2. Document Databases
+
+Store data as documents (usually JSON-like).
+
+Example:
+
+```json
+{
+  "userId": 123,
+  "name": "John",
+  "email": "john@test.com",
+  "orders": [
+    {
+      "id": 101,
+      "amount": 100
+    }
+  ]
+}
+```
+
+Each document can have a different structure.
+
+---
+
+## How It Works
+
+```text
+Collection
+   |
+   +-- Document 1
+   +-- Document 2
+   +-- Document 3
+```
+
+Similar to tables, but schema is flexible.
+
+---
+
+## Examples
+
+- MongoDB
+- Couchbase
+- CouchDB
+
+---
+
+## Use Cases
+
+- User profiles
+- Product catalogs
+- Content management systems
+- Mobile applications
+
+---
+
+## Advantages
+
+- Flexible schema
+- Natural JSON representation
+- Easy development
+
+## Limitations
+
+- Limited joins
+- Data duplication may occur
+
+---
+
+# 3. Wide-Column Databases
+
+Store data by column families rather than traditional rows.
+
+Inspired by systems built for massive scale.
+
+---
+
+## Conceptual Structure
+
+```text
+User Row
+--------------------------------
+UserId: 123
+Name: John
+Email: john@test.com
+
+Order Row
+--------------------------------
+OrderId: 101
+Amount: 100
+Status: Delivered
+```
+
+Different rows can have different columns.
+
+---
+
+## Examples
+
+- Apache Cassandra
+- Apache HBase
+- Google Bigtable
+
+---
+
+## Use Cases
+
+- Time-series data
+- IoT telemetry
+- Event logging
+- Large-scale analytics
+
+---
+
+## Advantages
+
+- Massive horizontal scalability
+- High write throughput
+- Distributed by design
+
+## Limitations
+
+- More complex data modeling
+- Query patterns must be planned carefully
+
+---
+
+# 4. Graph Databases
+
+Designed for highly connected data.
+
+Stores:
+
+```text
+Nodes + Relationships
+```
+
+Example:
+
+```text
+John ----FRIEND----> Alice
+  |
+LIKES
+  |
+Post123
+```
+
+Relationships are first-class citizens.
+
+---
+
+## Examples
+
+- Neo4j
+- Amazon Neptune
+- JanusGraph
+
+---
+
+## Use Cases
+
+- Social networks
+- Fraud detection
+- Recommendation engines
+- Network topology
+- Knowledge graphs
+
+---
+
+## Advantages
+
+- Efficient graph traversals
+- Relationship-heavy queries are fast
+
+## Limitations
+
+- Not ideal for simple CRUD workloads
+- Scaling can be more challenging than key-value systems
+
+---
+
+# Comparison Table
+
+| Type        | Data Model      | Best For                         |
+| ----------- | --------------- | -------------------------------- |
+| Key-Value   | Key → Value     | Cache, sessions, carts           |
+| Document    | JSON Documents  | User profiles, catalogs          |
+| Wide-Column | Column Families | Analytics, IoT, logs             |
+| Graph       | Nodes & Edges   | Social networks, recommendations |
+
+---
+
+# Choosing the Right NoSQL Database
+
+| Requirement                | Recommended Type |
+| -------------------------- | ---------------- |
+| Fast cache                 | Key-Value        |
+| Flexible JSON data         | Document         |
+| Billions of writes/day     | Wide-Column      |
+| Relationship-heavy queries | Graph            |
+| User sessions              | Key-Value        |
+| Product catalog            | Document         |
+| Event tracking             | Wide-Column      |
+| Friend recommendations     | Graph            |
+
+---
+
+# Interview-Ready Summary
+
+> NoSQL databases are broadly categorized into key-value, document, wide-column, and graph databases. Key-value stores are optimized for simple lookups and caching, document databases for flexible JSON data, wide-column databases for massive-scale write-heavy workloads, and graph databases for relationship-centric queries. The choice depends on the application's access patterns, scalability requirements, and data relationships.
+
 ## Question 6. What is a graph database and when is it used?
 
 ## Question 7. What is database partitioning?

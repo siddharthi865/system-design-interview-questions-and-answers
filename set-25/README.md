@@ -1925,6 +1925,481 @@ Monitor:
 
 ## Question 5. How do you implement deduplication at scale (like Gmail threads)?
 
+# Direct answer
+
+Deduplication at scale involves identifying records that represent the **same logical entity** and storing or displaying only one canonical copy while preserving references to duplicates. At systems like Gmail, this is achieved using a combination of **deterministic identifiers**, **content hashing**, **indexes**, **similarity algorithms**, and **background reconciliation**.
+
+For Gmail-like email threading, it's important to distinguish two related concepts:
+
+- **Message deduplication**: Prevent storing the same email multiple times.
+- **Conversation threading**: Group different emails belonging to the same conversation.
+
+These are implemented using different techniques.
+
+---
+
+# Requirements / Problem Framing
+
+## Functional Requirements
+
+- Detect duplicate records during writes
+- Support billions of records
+- Low-latency inserts and lookups
+- Avoid duplicate storage
+- Preserve references to original records
+- Handle concurrent writes
+- Recover from missed duplicates
+
+## Non-Functional Requirements
+
+- Horizontal scalability
+- High availability
+- Low false positives
+- Idempotent operations
+- Efficient storage utilization
+
+---
+
+# High-Level Architecture
+
+```text
+              Clients
+                  |
+             API Gateway
+                  |
+          Deduplication Service
+                  |
+      ------------------------------
+      |            |               |
+ Content Hash   Metadata Index   Similarity Engine
+      |            |               |
+      ------------------------------
+                  |
+          Canonical Record Store
+                  |
+        Object / Blob Storage
+
+---------------------------------------
+
+Background Pipeline
+
+New Records
+      |
+ Message Queue
+      |
+ Similarity Matching
+      |
+ Merge Candidates
+      |
+ Index Updates
+```
+
+---
+
+# Approach 1: Exact Deduplication (Hash-Based)
+
+For exact duplicates, compute a cryptographic hash of the content.
+
+```text
+Email Body
+
+↓
+
+SHA-256
+
+↓
+
+8F4A92...
+```
+
+Workflow:
+
+1. Compute content hash.
+2. Check if the hash already exists.
+3. If yes, reuse the existing object.
+4. Otherwise, store the new object and index the hash.
+
+### Advantages
+
+- O(1) lookup
+- Very accurate
+- Easy to scale
+
+### Limitations
+
+Any modification (even a single character) produces a different hash.
+
+---
+
+# Approach 2: Metadata-Based Deduplication
+
+Sometimes records differ slightly but represent the same logical object.
+
+For emails, compare metadata such as:
+
+- Message-ID
+- Sender
+- Recipient
+- Subject
+- Timestamp
+- Attachment IDs
+
+Example:
+
+```text
+Message-ID:
+abc123@example.com
+```
+
+If the same `Message-ID` is received multiple times, treat it as the same message.
+
+This is much cheaper than comparing full content.
+
+---
+
+# Approach 3: Similarity-Based Deduplication
+
+For near-duplicates, use similarity algorithms instead of exact hashes.
+
+Examples:
+
+- SimHash
+- MinHash
+- Locality Sensitive Hashing (LSH)
+
+Example:
+
+```text
+Document A
+
+Hello World!
+
+Document B
+
+Hello World!!
+```
+
+SHA-256:
+
+```text
+Different
+```
+
+SimHash:
+
+```text
+Very Similar
+```
+
+Useful for:
+
+- Emails
+- Documents
+- Images
+- News articles
+
+---
+
+# Gmail Threading
+
+Gmail threading is **not simply deduplication**.
+
+Instead, it groups related messages into a conversation using metadata such as:
+
+- `Message-ID`
+- `In-Reply-To`
+- `References`
+- Subject normalization (e.g., removing prefixes like "Re:" and "Fwd:")
+
+Example:
+
+```text
+Message A
+
+↓
+
+Reply B
+
+↓
+
+Reply C
+```
+
+All three are distinct emails but belong to one conversation.
+
+```text
+Conversation
+    |
+-------------
+|     |      |
+A     B      C
+```
+
+The conversation maintains an ordered list of message IDs rather than merging messages into one.
+
+---
+
+# Data Model
+
+## Message Table
+
+```text
+MessageID
+ConversationID
+Hash
+Sender
+Timestamp
+StoragePointer
+```
+
+## Conversation Table
+
+```text
+ConversationID
+
+↓
+
+List<MessageIDs>
+```
+
+This separation allows efficient retrieval of entire threads.
+
+---
+
+# Indexes
+
+Maintain indexes for:
+
+```text
+Content Hash
+
+↓
+
+Message ID
+```
+
+```text
+Message-ID
+
+↓
+
+Storage Pointer
+```
+
+```text
+Conversation ID
+
+↓
+
+Message List
+```
+
+These indexes enable constant-time lookups.
+
+---
+
+# Handling Concurrent Inserts
+
+Two identical messages may arrive simultaneously.
+
+Without coordination:
+
+```text
+Server A
+
+Store
+
+Server B
+
+Store
+```
+
+Duplicate storage occurs.
+
+Solution:
+
+Use atomic operations.
+
+Example:
+
+```text
+SETNX(hash)
+```
+
+or
+
+```text
+INSERT ... ON CONFLICT DO NOTHING
+```
+
+Only one request creates the canonical record; others reuse it.
+
+---
+
+# Background Deduplication
+
+Some duplicates are difficult to detect in the request path.
+
+A background job can:
+
+1. Scan recent records.
+2. Group by similarity.
+3. Merge duplicates.
+4. Update indexes.
+5. Remove redundant storage.
+
+This reduces write latency while improving long-term storage efficiency.
+
+---
+
+# Deep Design Considerations
+
+## 1. Content-Addressable Storage
+
+Instead of naming objects by filename:
+
+```text
+Object Name
+
+↓
+
+SHA-256(Content)
+```
+
+If identical content already exists, simply create another reference.
+
+This is common in backup systems and version control.
+
+---
+
+## 2. Reference Counting
+
+When multiple logical records point to the same stored object:
+
+```text
+Blob X
+
+↓
+
+Reference Count = 4
+```
+
+Deleting one message decrements the count.
+
+Only delete the blob when the count reaches zero.
+
+---
+
+## 3. Bloom Filters
+
+At very high scale, checking the primary index for every insert can be expensive.
+
+Use a Bloom filter as a fast pre-check:
+
+```text
+Incoming Hash
+
+↓
+
+Bloom Filter
+
+↓
+
+Probably Exists
+
+↓
+
+Verify in Index
+```
+
+Advantages:
+
+- Reduces database lookups
+- Small memory footprint
+
+Limitation:
+
+- False positives are possible.
+- False negatives are not.
+
+---
+
+## 4. Partitioning
+
+Shard by hash:
+
+```text
+Hash
+
+↓
+
+Shard 1
+
+Shard 2
+
+Shard 3
+```
+
+Benefits:
+
+- Even load distribution
+- Parallel processing
+- Horizontal scaling
+
+---
+
+## 5. Eventual Consistency
+
+Cross-region deployments may temporarily store duplicates.
+
+Periodic reconciliation jobs compare indexes and merge duplicates later.
+
+This favors availability and low write latency over immediate global deduplication.
+
+---
+
+# Capacity / Sizing
+
+Assume:
+
+- **500 million new emails/day**
+- Average size: **100 KB**
+- 15% exact duplicates
+
+Without deduplication:
+
+```text
+500M × 100 KB
+
+≈ 50 TB/day
+```
+
+With 15% duplicate elimination:
+
+```text
+≈ 42.5 TB/day
+```
+
+Saving roughly **7.5 TB/day**, in addition to reduced replication and backup costs.
+
+---
+
+# Trade-offs
+
+| Approach                    | Pros                              | Cons                             |
+| --------------------------- | --------------------------------- | -------------------------------- |
+| Content hashing             | Fast, accurate for identical data | Misses near-duplicates           |
+| Metadata matching           | Very inexpensive                  | Depends on reliable metadata     |
+| Similarity algorithms       | Detects modified copies           | Higher CPU cost                  |
+| Background reconciliation   | Doesn't slow writes               | Duplicates may exist temporarily |
+| Content-addressable storage | Excellent storage efficiency      | Requires reference management    |
+
+---
+
+# Interview-ready summary
+
+> "At scale, deduplication is usually implemented in layers. Exact duplicates are detected using content hashes and content-addressable storage, while metadata indexes provide fast identity checks. Near-duplicates require similarity algorithms such as SimHash or MinHash, often executed asynchronously. For Gmail-like systems, message deduplication and conversation threading are separate concerns: duplicate messages are eliminated using identifiers like `Message-ID` and content hashes, while threads are built using `Message-ID`, `In-Reply-To`, and `References` headers, allowing distinct messages to be grouped into a single conversation without losing their individual identities.
+
 ## Question 6. How would you design a serverless workflow orchestration engine?
 
 ## Question 7. How do you handle multi-cloud deployments in system design?

@@ -2245,6 +2245,475 @@ Use centralized logging, metrics, distributed tracing, and alerts.
 
 ## Question 5. How do you design a banking transaction system?
 
+# Design a Banking Transaction System
+
+## Direct Answer
+
+A banking transaction system processes financial operations such as deposits, withdrawals, transfers, bill payments, and account inquiries. The primary goals are **correctness, consistency, durability, security, and reliability**. Unlike many internet-scale systems where eventual consistency is acceptable, banking transactions require **strong consistency (ACID transactions)** because losing or duplicating money is unacceptable.
+
+The most critical design challenge is ensuring **exactly-once processing** and **atomic money transfers** even in the presence of failures.
+
+---
+
+# 1. Requirements / Problem Framing
+
+## Functional Requirements
+
+### Customer Features
+
+- Create and manage bank accounts
+- View account balance
+- Deposit money
+- Withdraw money
+- Transfer money between accounts
+- View transaction history
+- Pay bills
+- Receive transaction notifications
+
+### Admin Features
+
+- Freeze/unfreeze accounts
+- Reverse transactions (where permitted)
+- Fraud monitoring
+- Generate audit reports
+
+---
+
+## Non-functional Requirements
+
+- Strong consistency (ACID)
+- High availability
+- Zero data loss
+- Exactly-once transaction processing
+- High security and regulatory compliance
+- Low transaction latency (typically <1 second)
+- Complete auditability
+
+---
+
+# 2. High-Level Architecture
+
+```text
+                 Mobile / Web / ATM
+                        |
+                 Load Balancer
+                        |
+                  API Gateway
+                        |
+ ------------------------------------------------------------
+ |           |            |            |                    |
+Account   Transaction   Payment    Notification        Fraud
+Service    Service      Service       Service         Detection
+      \         |            |             |             /
+       \--------|------------|-------------|------------/
+                    Event Bus (Kafka)
+                           |
+                  Audit & Analytics
+
+Storage
+--------
+Account DB (Primary)
+Transaction Ledger DB
+Redis Cache (Read-only data)
+```
+
+---
+
+# 3. Core Components
+
+## Account Service
+
+Maintains account information.
+
+```text
+Account
+---------
+account_id
+customer_id
+balance
+status
+currency
+```
+
+---
+
+## Transaction Service
+
+Responsible for
+
+- Deposits
+- Withdrawals
+- Transfers
+- Transaction validation
+- Ledger updates
+
+Transaction states:
+
+```text
+INITIATED
+    ↓
+PROCESSING
+    ↓
+COMPLETED
+```
+
+or
+
+```text
+FAILED
+REVERSED
+```
+
+---
+
+## Ledger Service
+
+The ledger is the **source of truth**.
+
+Every transaction is recorded immutably.
+
+Example:
+
+```text
+Txn 101
+
+Debit: Account A ₹500
+
+Credit: Account B ₹500
+```
+
+Balances can always be reconstructed from the ledger.
+
+---
+
+## Fraud Detection Service
+
+Checks:
+
+- Large transfers
+- Unusual locations
+- Velocity limits
+- Suspicious patterns
+
+Often runs asynchronously, except for high-risk transactions that require synchronous validation.
+
+---
+
+# 4. Database Design
+
+## Account Table
+
+```text
+account_id
+customer_id
+balance
+currency
+status
+```
+
+---
+
+## Transaction Table
+
+```text
+transaction_id
+from_account
+to_account
+amount
+status
+timestamp
+reference_id
+```
+
+---
+
+## Ledger Table
+
+```text
+entry_id
+transaction_id
+account_id
+type (Debit/Credit)
+amount
+timestamp
+```
+
+Indexes:
+
+- account_id
+- transaction_id
+- timestamp
+
+---
+
+# 5. Money Transfer Flow
+
+Example:
+
+```text
+Transfer ₹1000
+
+A  →  B
+```
+
+Flow:
+
+```text
+Client
+   |
+Transaction Service
+   |
+Validate accounts
+   |
+BEGIN TRANSACTION
+   |
+Debit Account A
+   |
+Credit Account B
+   |
+Insert Ledger Entries
+   |
+Commit
+   |
+Publish TransactionCompleted
+   |
+Send Notification
+```
+
+The debit and credit **must occur in the same database transaction**.
+
+---
+
+# 6. Ensuring Atomicity
+
+Never perform:
+
+```text
+Debit A
+
+↓
+
+Network failure
+
+↓
+
+Credit B
+```
+
+This results in money disappearing.
+
+Instead:
+
+```sql
+BEGIN;
+
+UPDATE Account
+SET balance = balance - 1000
+WHERE account_id='A';
+
+UPDATE Account
+SET balance = balance + 1000
+WHERE account_id='B';
+
+INSERT INTO Ledger(...);
+
+COMMIT;
+```
+
+Either all operations succeed or none are committed.
+
+---
+
+# 7. Preventing Double Spending
+
+Suppose two withdrawals happen simultaneously.
+
+Without locking:
+
+```text
+Balance = ₹1000
+
+User A withdraws ₹700
+
+User B withdraws ₹700
+```
+
+Both may succeed incorrectly.
+
+### Solution: Row-Level Locking
+
+```sql
+SELECT *
+FROM Account
+WHERE account_id='A'
+FOR UPDATE;
+```
+
+Only one transaction updates the balance at a time.
+
+Alternative:
+
+- Optimistic locking using a version column (works well when contention is low)
+
+---
+
+# 8. Idempotency
+
+Clients may retry requests if they don't receive a response.
+
+Without protection:
+
+```text
+Transfer ₹1000
+
+↓
+
+Timeout
+
+↓
+
+Retry
+
+↓
+
+₹2000 transferred
+```
+
+Solution:
+
+Every request includes an **Idempotency Key**.
+
+```text
+Request
+
+Idempotency-Key:
+abc123
+```
+
+If the same key is received again, return the original result instead of executing the transfer again.
+
+---
+
+# 9. Scaling Strategy
+
+## Stateless Services
+
+```text
+Load Balancer
+      |
+API 1
+API 2
+API 3
+```
+
+---
+
+## Read Replicas
+
+```text
+Primary
+  |
+Replica 1
+Replica 2
+```
+
+Use replicas for:
+
+- Account history
+- Statements
+- Reporting
+
+All balance updates go to the primary.
+
+---
+
+## Partitioning
+
+Large systems can partition by:
+
+- Customer ID
+- Account ID
+- Geographic region
+
+Cross-shard transfers require distributed transaction coordination or a carefully designed transfer workflow.
+
+---
+
+## Caching
+
+Use Redis only for **non-critical reads**, such as:
+
+- User profile
+- Branch information
+- Frequently accessed metadata
+
+Avoid caching account balances as the source of truth, since stale data can lead to incorrect decisions.
+
+---
+
+# 10. Event-Driven Architecture
+
+After a successful transaction:
+
+```text
+Transaction Completed
+          |
+        Kafka
+          |
+-------------------------------
+|             |               |
+Notification  Analytics   Fraud Detection
+```
+
+The core transaction completes synchronously, while downstream tasks run asynchronously.
+
+---
+
+# 11. Security / Observability
+
+### Security
+
+- Multi-factor authentication
+- OAuth/JWT for APIs
+- TLS encryption
+- Encryption at rest
+- Role-based access control
+- Hardware Security Modules (HSMs) for key management
+- PCI DSS compliance (for card-related systems)
+- Immutable audit logs
+
+### Observability
+
+Monitor:
+
+- Transaction success/failure rates
+- Transaction latency
+- Database lock contention
+- Deadlocks
+- Replication lag
+- Fraud alerts
+- API error rates
+
+Use centralized logging, metrics, distributed tracing, and alerting.
+
+---
+
+# 12. Trade-offs
+
+| Design Choice              | Pros                                         | Cons                                        |
+| -------------------------- | -------------------------------------------- | ------------------------------------------- |
+| ACID transactions          | Guarantees correctness                       | Lower write scalability                     |
+| Ledger-based architecture  | Complete audit trail and easy reconciliation | Additional storage and processing           |
+| Pessimistic locking        | Prevents race conditions                     | Can reduce concurrency                      |
+| Optimistic locking         | Higher throughput under low contention       | Retries required on conflicts               |
+| Event-driven notifications | Decoupled and scalable                       | Eventual consistency for non-critical tasks |
+
+---
+
+# Interview-Ready Summary
+
+> "For a banking transaction system, correctness is the highest priority. I'd use a relational database with ACID transactions to ensure atomic debit and credit operations. An immutable ledger would act as the source of truth, while row-level locking or optimistic concurrency would prevent double spending. Every API would support idempotency keys to avoid duplicate transfers, and asynchronous services like notifications, analytics, and fraud detection would consume transaction events from Kafka. This architecture provides strong consistency, durability, auditability, and scales horizontally while maintaining financial correctness."
+
 ## Question 6. How do you design a hospital management system?
 
 ## Question 7. How do you design a warehouse inventory management system?

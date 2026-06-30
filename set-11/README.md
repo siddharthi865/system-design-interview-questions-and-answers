@@ -1092,6 +1092,283 @@ In modern cloud-native systems, the trade-off often favors **availability and sc
 
 ## Question 5. Explain the concept of ACID in databases
 
+# ACID in Databases
+
+## Direct answer
+
+**ACID** is a set of four properties that guarantee reliable and correct database transactions, even in the presence of failures such as crashes, power outages, or concurrent access.
+
+ACID stands for:
+
+- **A** – Atomicity
+- **C** – Consistency
+- **I** – Isolation
+- **D** – Durability
+
+Together, these properties ensure that transactions are processed safely and maintain data integrity.
+
+---
+
+## What is a transaction?
+
+A **transaction** is a sequence of database operations treated as a single unit of work.
+
+Example: Bank transfer of ₹500
+
+```text
+Account A = ₹5000
+Account B = ₹2000
+
+Transaction:
+1. Debit ₹500 from A
+2. Credit ₹500 to B
+```
+
+Both operations must succeed together.
+
+---
+
+## 1. Atomicity
+
+### Definition
+
+**Atomicity** means **all operations in a transaction succeed, or none of them do**.
+
+There is no partial completion.
+
+### Example
+
+```text
+BEGIN
+
+Debit A ₹500
+Credit B ₹500
+
+COMMIT
+```
+
+If the system crashes after debiting A but before crediting B:
+
+Without Atomicity:
+
+```text
+A = ₹4500
+B = ₹2000
+```
+
+Money is lost.
+
+With Atomicity:
+
+```text
+ROLLBACK
+
+A = ₹5000
+B = ₹2000
+```
+
+The database undoes all changes, leaving the data unchanged.
+
+### Key idea
+
+> A transaction is **all-or-nothing**.
+
+---
+
+## 2. Consistency
+
+### Definition
+
+**Consistency** ensures that a transaction moves the database from **one valid state to another valid state**, preserving all integrity constraints and business rules.
+
+### Example
+
+Suppose a rule states:
+
+```text
+Account balance cannot be negative.
+```
+
+Transaction:
+
+```text
+Withdraw ₹6000
+Current Balance = ₹5000
+```
+
+The database rejects the transaction because it would violate the constraint.
+
+### Before
+
+```text
+Balance = ₹5000
+```
+
+### After
+
+```text
+Still ₹5000
+```
+
+No invalid state is committed.
+
+### Key idea
+
+> Every committed transaction must satisfy database constraints.
+
+---
+
+## 3. Isolation
+
+### Definition
+
+**Isolation** ensures that **concurrent transactions do not interfere with each other**. Each transaction behaves as if it is executing alone.
+
+### Example
+
+Suppose two users try to buy the last item in stock.
+
+Current inventory:
+
+```text
+Stock = 1
+```
+
+Two transactions:
+
+```text
+T1: Buy item
+T2: Buy item
+```
+
+Without isolation:
+
+```text
+T1 reads Stock = 1
+T2 reads Stock = 1
+
+T1 updates Stock = 0
+T2 updates Stock = 0
+```
+
+Two customers successfully purchase one item.
+
+With proper isolation:
+
+```text
+T1 completes first
+T2 waits
+
+T2 reads Stock = 0
+Purchase rejected
+```
+
+Only one purchase succeeds.
+
+### Key idea
+
+> Concurrent transactions should not produce incorrect results.
+
+---
+
+## 4. Durability
+
+### Definition
+
+Once a transaction is **committed**, its changes are **permanent**, even if the system crashes immediately afterward.
+
+### Example
+
+```text
+Transfer completed
+COMMIT
+```
+
+Immediately after commit:
+
+```text
+Power failure
+```
+
+After the database restarts:
+
+```text
+Transfer is still present.
+```
+
+The committed data survives because it has been persisted (typically using mechanisms like transaction logs and recovery).
+
+### Key idea
+
+> A committed transaction is never lost.
+
+---
+
+## ACID summary
+
+| Property    | Meaning                                       | Example                                |
+| ----------- | --------------------------------------------- | -------------------------------------- |
+| Atomicity   | All operations succeed or all fail            | Money isn't partially transferred      |
+| Consistency | Database remains valid after each transaction | No negative balances                   |
+| Isolation   | Concurrent transactions don't interfere       | Two users can't buy the same last item |
+| Durability  | Committed changes survive crashes             | Data remains after power failure       |
+
+---
+
+## Real-world example
+
+Online banking transfer:
+
+```text
+Transfer ₹1000
+
+1. Debit Account A
+2. Credit Account B
+3. Commit
+```
+
+How ACID applies:
+
+- **Atomicity:** Both debit and credit happen together.
+- **Consistency:** Total money in the system remains unchanged.
+- **Isolation:** Simultaneous transfers don't corrupt balances.
+- **Durability:** Once confirmed, the transfer persists despite failures.
+
+---
+
+## ACID vs BASE
+
+Modern distributed systems sometimes relax ACID guarantees to improve scalability and availability.
+
+| ACID                           | BASE                                     |
+| ------------------------------ | ---------------------------------------- |
+| Strong consistency             | Eventual consistency                     |
+| Immediate correctness          | Temporary inconsistency allowed          |
+| Common in relational databases | Common in distributed NoSQL systems      |
+| Prioritizes data integrity     | Prioritizes availability and scalability |
+
+Examples:
+
+- **ACID:** Banking, payment systems, inventory management.
+- **BASE:** Social media feeds, analytics, recommendation systems.
+
+---
+
+## Trade-offs
+
+Strong ACID guarantees provide excellent data integrity but can reduce scalability in distributed systems:
+
+- **Atomicity** may require distributed coordination (e.g., two-phase commit).
+- **Isolation** can reduce throughput because transactions may wait for locks or conflict resolution.
+- **Durability** adds write latency since data must be persisted before acknowledging success.
+- Distributed systems often relax consistency or isolation where temporary inconsistencies are acceptable to achieve better performance and availability.
+
+---
+
+## Interview-ready summary
+
+> **ACID** is a set of transaction guarantees that ensure reliable database operations. **Atomicity** ensures all-or-nothing execution, **Consistency** ensures every transaction preserves database rules, **Isolation** prevents concurrent transactions from interfering with one another, and **Durability** guarantees that committed data survives failures. ACID is essential for systems like banking, payments, and inventory management, where correctness is more important than maximizing scalability.
+
 ## Question 6. What is BASE in NoSQL systems?
 
 ## Question 7. What is a data lake?

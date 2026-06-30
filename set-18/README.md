@@ -1016,6 +1016,323 @@ A relay server is an intermediary system that forwards messages or traffic betwe
 
 ## Question 5. How do you design a web crawler like Googlebot?
 
+## Direct answer
+
+A web crawler like Googlebot is a **distributed system that continuously discovers, fetches, processes, and indexes web pages at massive scale**. It is typically designed as a **pipeline of components (URL frontier → fetchers → parsers → indexers)** with strong focus on **scalability, politeness (robots.txt), deduplication, and freshness**.
+
+---
+
+## Requirements / problem framing
+
+### Functional requirements
+
+- Discover web pages via seed URLs
+- Crawl pages recursively by following links
+- Fetch HTML content reliably at scale
+- Respect robots.txt and crawl policies
+- Deduplicate URLs and content
+- Extract links and metadata
+- Store and index content for search
+
+### Non-functional requirements
+
+- Massive scale (billions of pages)
+- High throughput crawling
+- Polite crawling (avoid overloading websites)
+- Freshness (recrawl updated pages)
+- Fault tolerance (network failures, site downtime)
+- Distributed coordination
+
+---
+
+## High-level architecture
+
+```text id="crawler_arch"
+            Seed URLs
+                 |
+                 v
+        +-------------------+
+        | URL Frontier      |
+        | (priority queue)  |
+        +-------------------+
+          /        |        \
+         v         v         v
+  +----------+ +----------+ +----------+
+  | Fetcher  | | Fetcher  | | Fetcher  |
+  +----------+ +----------+ +----------+
+         \         |         /
+          v        v        v
+        +----------------------+
+        | Parser / Extractor   |
+        | - links extraction   |
+        | - content cleaning   |
+        +----------------------+
+                 |
+                 v
+        +----------------------+
+        | Dedup / Normalizer   |
+        +----------------------+
+                 |
+                 v
+        +----------------------+
+        | Indexer / Storage    |
+        +----------------------+
+                 |
+                 v
+        +----------------------+
+        | URL Frontier (again) |
+        +----------------------+
+```
+
+---
+
+## Core components
+
+### 1. URL Frontier (brain of the crawler)
+
+This is a **priority queue of URLs to crawl**.
+
+Responsibilities:
+
+- Stores discovered URLs
+- Prioritizes based on:
+  - page importance (PageRank-like score)
+  - freshness
+  - domain politeness constraints
+
+- Prevents duplicate scheduling
+
+Implementation:
+
+- Distributed queue (Kafka / Redis / custom sharded queue)
+- Per-domain sub-queues
+
+---
+
+### 2. Fetcher layer
+
+Responsible for:
+
+- HTTP requests at scale
+- Handling retries, timeouts
+- Respecting rate limits per domain
+
+Key behaviors:
+
+- connection pooling
+- DNS caching
+- exponential backoff
+
+---
+
+### 3. Parser / extractor
+
+Processes fetched HTML:
+
+- Extracts links (`<a href>`)
+- Extracts metadata (title, description)
+- Cleans content
+- Detects canonical URLs
+
+---
+
+### 4. Deduplication system (critical at scale)
+
+Two levels:
+
+#### URL dedup
+
+- Normalize URLs:
+  - remove tracking params
+  - canonicalization
+
+- Check against visited set
+
+Tech:
+
+- Bloom filters (fast probabilistic check)
+- Distributed key-value store (exact check)
+
+#### Content dedup
+
+- Detect duplicate pages (mirror sites)
+- Use hashing (SimHash / MinHash)
+
+---
+
+### 5. Indexing system
+
+Sends processed content to:
+
+- inverted index (search engine backend)
+- document store
+
+---
+
+### 6. Politeness controller
+
+Ensures we don’t overload websites:
+
+Rules:
+
+- per-domain rate limiting
+- obey robots.txt
+- crawl-delay handling
+- adaptive throttling based on latency/errors
+
+---
+
+## Deep design considerations
+
+### 1. Distributed crawling (scaling to billions of pages)
+
+Crawler is horizontally scaled:
+
+- multiple fetcher nodes
+- partition URL frontier by domain hash
+
+```text id="distributed_crawl"
+Domain A → Worker 1
+Domain B → Worker 2
+Domain C → Worker 3
+```
+
+This avoids:
+
+- hot domains
+- overload on single node
+
+---
+
+### 2. URL scheduling strategy (very important)
+
+We don’t crawl blindly.
+
+We assign priority based on:
+
+- PageRank / link score
+- update frequency
+- domain authority
+- last modified time
+
+This creates a **focused crawl (not uniform BFS)**.
+
+---
+
+### 3. Freshness vs coverage trade-off
+
+We cannot crawl everything frequently.
+
+Strategies:
+
+- “hot pages” recrawled often
+- long-tail pages crawled rarely
+- adaptive scheduling based on change rate
+
+---
+
+### 4. Failure handling
+
+- Fetch failures → retry queue
+- Dead domains → backoff exponentially
+- Worker failure → task reassignment
+
+---
+
+### 5. Storage strategy
+
+We store:
+
+- raw HTML (optional, compressed)
+- parsed text
+- metadata
+- link graph
+
+Storage systems:
+
+- distributed file system (HDFS/S3-like)
+- key-value store for metadata
+
+---
+
+### 6. Handling web scale issues
+
+#### Infinite URL spaces
+
+- calendars, filters, session IDs
+- solution: URL canonicalization + heuristics
+
+#### Spider traps
+
+- detect repetitive URL patterns
+- limit crawl depth per domain
+
+---
+
+### 7. Robots.txt and ethics
+
+Crawler must:
+
+- fetch robots.txt first
+- cache it per domain
+- obey disallow rules
+- respect crawl delay
+
+---
+
+## Trade-offs
+
+| Design choice           | Pros               | Cons                   |
+| ----------------------- | ------------------ | ---------------------- |
+| BFS crawling            | simple             | not prioritized        |
+| priority-based crawling | efficient indexing | complex scheduling     |
+| centralized frontier    | simple             | bottleneck             |
+| distributed frontier    | scalable           | consistency challenges |
+| aggressive crawling     | fresh data         | risk of blocking       |
+
+---
+
+## Capacity / scaling intuition
+
+At Googlebot scale:
+
+- billions of pages
+- tens of millions of pages/sec fetch capacity
+- massive distributed frontier (sharded by domain hash)
+- heavy reliance on caching + dedup
+
+Key bottleneck:
+
+- network bandwidth
+- not compute
+
+---
+
+## Security / observability
+
+### Security
+
+- protect against malicious websites:
+  - infinite redirects
+  - payload traps
+
+- sandbox parsers
+- strict timeouts
+
+### Observability
+
+- crawl rate per domain
+- error rates (HTTP 4xx/5xx)
+- frontier queue depth
+- freshness lag metrics
+- duplicate detection rate
+
+---
+
+## Interview-ready summary
+
+A web crawler like Googlebot is a distributed pipeline system composed of a URL frontier, fetchers, parsers, deduplication layers, and an indexing system. URLs are prioritized based on importance and freshness, while politeness constraints like robots.txt and per-domain rate limiting ensure ethical crawling. The system is massively distributed with sharded scheduling and stateless fetch workers, and it relies heavily on deduplication, retry mechanisms, and adaptive scheduling to operate efficiently at internet scale.
+
 ## Question 6. How do you design a system with DNS load balancing?
 
 ## Question 7. What is a TCP vs UDP tradeoff in system design?

@@ -1515,6 +1515,408 @@ Used in systems inspired by or derived from Paxos:
 
 ## Question 5. What is consensus in distributed systems?
 
+# Direct answer
+
+**Consensus** is the process by which multiple nodes in a distributed system agree on a single value, decision, or sequence of operations, even in the presence of failures.
+
+In simple terms, consensus ensures that **all healthy nodes eventually reach the same state**, despite network issues, crashes, or concurrent requests.
+
+---
+
+# Why is Consensus Needed?
+
+Consider a distributed database with three nodes:
+
+```text
+Node A
+Node B
+Node C
+```
+
+A client wants to update a user's balance:
+
+```text
+Balance = $100 → $150
+```
+
+Questions arise:
+
+- Which node should accept the write?
+- What if one node crashes during the update?
+- What if nodes see updates in different orders?
+
+Without consensus:
+
+```text
+Node A = $150
+Node B = $150
+Node C = $100
+```
+
+The system becomes inconsistent.
+
+With consensus:
+
+```text
+Node A = $150
+Node B = $150
+Node C = $150
+```
+
+All nodes agree on the same state.
+
+---
+
+# What Must Consensus Guarantee?
+
+A consensus algorithm typically provides:
+
+## 1. Agreement
+
+All non-faulty nodes agree on the same value.
+
+```text
+Node A -> X
+Node B -> X
+Node C -> X
+```
+
+Not:
+
+```text
+Node A -> X
+Node B -> Y
+```
+
+---
+
+## 2. Validity
+
+The agreed value must be a value that was actually proposed.
+
+Example:
+
+```text
+Proposed:
+A -> 10
+B -> 20
+```
+
+Consensus cannot produce:
+
+```text
+100
+```
+
+because nobody proposed it.
+
+---
+
+## 3. Termination (Liveness)
+
+Eventually, the system reaches a decision.
+
+```text
+Proposal
+   ↓
+Consensus
+   ↓
+Decision
+```
+
+The system shouldn't remain stuck forever.
+
+---
+
+## 4. Integrity
+
+A decision is made only once.
+
+```text
+Decided = X
+```
+
+Cannot later become:
+
+```text
+Decided = Y
+```
+
+---
+
+# Example: Distributed Database
+
+Imagine a 5-node cluster:
+
+```text
+N1 N2 N3 N4 N5
+```
+
+Client sends:
+
+```text
+UPDATE balance = 150
+```
+
+The leader proposes the update.
+
+Nodes vote:
+
+```text
+N1 Yes
+N2 Yes
+N3 Yes
+N4 No
+N5 Offline
+```
+
+Majority:
+
+```text
+3/5
+```
+
+Consensus achieved.
+
+All nodes eventually apply:
+
+```text
+balance = 150
+```
+
+---
+
+# Consensus vs Leader Election
+
+These concepts are related but not identical.
+
+| Concept         | Purpose                       |
+| --------------- | ----------------------------- |
+| Leader Election | Choose a coordinator          |
+| Consensus       | Agree on a value or operation |
+
+Leader election itself is usually solved using consensus.
+
+Example:
+
+```text
+Consensus Result:
+Leader = Node A
+```
+
+After election:
+
+```text
+Node A coordinates future writes
+```
+
+---
+
+# How Consensus Works
+
+Most practical systems use:
+
+```text
+Client
+  |
+Leader
+  |
+Followers
+```
+
+Flow:
+
+1. Client sends request.
+2. Leader proposes operation.
+3. Followers acknowledge.
+4. Majority agrees.
+5. Operation is committed.
+6. All nodes apply the change.
+
+```text
+Client
+   |
+ Leader
+   |
+-----------
+|    |    |
+F1   F2   F3
+```
+
+---
+
+# Popular Consensus Algorithms
+
+## Raft
+
+Features:
+
+- Easy to understand
+- Leader-based
+- Strong consistency
+
+Used by:
+
+- etcd
+- Consul
+
+---
+
+## Paxos
+
+Features:
+
+- Theoretical foundation of many systems
+- Strong consistency
+- More complex
+
+Developed by:
+
+- Leslie Lamport
+
+---
+
+## Zab
+
+Used by:
+
+- Apache ZooKeeper
+
+Leader-based protocol optimized for ZooKeeper's coordination workloads.
+
+---
+
+# Majority Quorum
+
+Consensus usually requires a majority.
+
+Formula:
+
+```text
+Majority = floor(N/2) + 1
+```
+
+Examples:
+
+| Nodes | Majority Needed |
+| ----- | --------------- |
+| 3     | 2               |
+| 5     | 3               |
+| 7     | 4               |
+
+Why majority?
+
+```text
+A B C D E
+```
+
+Possible quorums:
+
+```text
+A B C
+C D E
+```
+
+Both overlap at:
+
+```text
+C
+```
+
+This overlap prevents conflicting decisions.
+
+---
+
+# Consensus Under Failures
+
+### Node Failure
+
+```text
+5 Nodes
+1 Node Crashes
+```
+
+Remaining:
+
+```text
+4 Nodes
+```
+
+Consensus still works because majority is available.
+
+---
+
+### Network Partition
+
+```text
+A B | C D E
+```
+
+Partition 1:
+
+```text
+2 Nodes
+```
+
+Partition 2:
+
+```text
+3 Nodes
+```
+
+Only the side with the majority:
+
+```text
+C D E
+```
+
+can continue making decisions.
+
+This prevents split-brain scenarios.
+
+---
+
+# Trade-offs
+
+| Benefit                     | Cost                                   |
+| --------------------------- | -------------------------------------- |
+| Strong consistency          | Higher latency                         |
+| Automatic failover          | More complexity                        |
+| Correctness under failures  | Extra network communication            |
+| Prevents conflicting writes | Reduced availability during partitions |
+
+Consensus prioritizes correctness and consistency over maximum availability.
+
+---
+
+# Real-World Examples
+
+### Distributed Databases
+
+- Spanner
+- CockroachDB
+
+Use consensus to keep replicas synchronized.
+
+### Coordination Systems
+
+- etcd
+- Apache ZooKeeper
+
+Use consensus for leader election and configuration management.
+
+### Container Orchestration
+
+- Kubernetes
+
+Stores cluster state in etcd, which relies on Raft consensus.
+
+---
+
+# Interview-ready Summary
+
+"Consensus is the mechanism that allows multiple nodes in a distributed system to agree on a single value or sequence of operations despite failures. It guarantees agreement, validity, and eventual progress. Consensus algorithms such as Raft and Paxos use majority quorums to ensure that all healthy nodes converge on the same state, making them fundamental to distributed databases, leader election, configuration management, and fault-tolerant systems."
+
 ## Question 6. How do you design a highly available system?
 
 ## Question 7. What are design considerations for disaster recovery?

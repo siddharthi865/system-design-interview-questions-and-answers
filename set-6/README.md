@@ -875,6 +875,258 @@ The customer receives immediate confirmation that the order was placed, while se
 
 ## Question 5. What is the difference between online (OLTP) and analytical (OLAP) databases?
 
+# Direct answer
+
+**OLTP (Online Transaction Processing)** databases are optimized for **fast, frequent transactional operations** such as inserts, updates, and deletes. They power day-to-day application workloads.
+
+**OLAP (Online Analytical Processing)** databases are optimized for **complex analytical queries** over large volumes of historical data. They power reporting, business intelligence, and data analytics.
+
+In simple terms:
+
+- **OLTP = Run the business**
+- **OLAP = Analyze the business**
+
+---
+
+# Intuition
+
+Consider an e-commerce company.
+
+### OLTP
+
+When a customer:
+
+- Places an order
+- Makes a payment
+- Updates their address
+- Adds an item to the cart
+
+The system must process each transaction quickly and correctly.
+
+### OLAP
+
+The business wants answers to questions like:
+
+- What were the top-selling products last quarter?
+- Which cities generated the most revenue?
+- What is the monthly sales trend?
+
+These queries analyze millions of records and are not time-critical.
+
+---
+
+# Comparison
+
+| Aspect        | OLTP                             | OLAP                                       |
+| ------------- | -------------------------------- | ------------------------------------------ |
+| Purpose       | Process day-to-day transactions  | Analyze historical data                    |
+| Workload      | Many small read/write operations | Fewer but complex read-heavy queries       |
+| Query type    | Simple CRUD operations           | Aggregations, joins, trend analysis        |
+| Data          | Current operational data         | Historical and aggregated data             |
+| Response time | Milliseconds                     | Seconds to minutes                         |
+| Updates       | Continuous                       | Periodic batch or streaming loads          |
+| Schema        | Highly normalized                | Often denormalized (Star/Snowflake schema) |
+| Users         | End users, applications          | Analysts, data scientists, BI tools        |
+| Primary goal  | Fast transactions                | Fast analytics                             |
+
+---
+
+# OLTP architecture
+
+```text
+Users
+   │
+   ▼
+Application
+   │
+   ▼
+OLTP Database
+```
+
+Characteristics:
+
+- Thousands of concurrent users
+- Frequent inserts and updates
+- ACID transactions
+- Low latency
+- High availability
+
+Example queries:
+
+```sql
+INSERT INTO Orders (...);
+
+UPDATE Accounts
+SET balance = balance - 100
+WHERE account_id = 101;
+
+SELECT * FROM Products
+WHERE product_id = 500;
+```
+
+These queries typically access a small number of rows.
+
+---
+
+# OLAP architecture
+
+```text
+Applications
+        │
+        ▼
+ETL / ELT Pipeline
+        │
+        ▼
+Data Warehouse
+        │
+        ▼
+BI Dashboard / Analysts
+```
+
+Characteristics:
+
+- Large scans across millions or billions of rows
+- Complex joins and aggregations
+- Historical data
+- Read-heavy workload
+
+Example query:
+
+```sql
+SELECT
+    city,
+    SUM(total_sales)
+FROM sales
+WHERE order_date >= '2026-01-01'
+GROUP BY city
+ORDER BY SUM(total_sales) DESC;
+```
+
+This query may process millions of records.
+
+---
+
+# Data modeling
+
+## OLTP
+
+Typically uses **normalized** schemas to reduce redundancy and maintain data integrity.
+
+Example:
+
+```text
+Customers
+Orders
+Products
+Payments
+```
+
+Each entity is stored separately, with relationships maintained through keys.
+
+### Advantages
+
+- Less duplicate data
+- Easier updates
+- Strong consistency
+
+---
+
+## OLAP
+
+Often uses **denormalized** schemas, such as **Star** or **Snowflake** schemas, to optimize analytical queries.
+
+Example (Star Schema):
+
+```text
+          Date
+            │
+            │
+Product ─ Sales ─ Customer
+            │
+            │
+         Location
+```
+
+Fact tables store measurable events (e.g., sales), while dimension tables provide descriptive attributes (e.g., product, customer, date).
+
+### Advantages
+
+- Faster aggregations
+- Fewer joins
+- Better query performance for analytics
+
+---
+
+# Real-world examples
+
+## OLTP systems
+
+- Banking transactions
+- ATM withdrawals
+- E-commerce checkout
+- Ride booking
+- Hotel reservations
+- Inventory updates
+
+## OLAP systems
+
+- Sales dashboards
+- Financial reporting
+- Customer segmentation
+- Fraud detection analysis
+- Demand forecasting
+- Marketing campaign analysis
+
+---
+
+# Can the same database do both?
+
+Technically, yes—but it's usually not a good idea at scale.
+
+Example:
+
+If analysts run a query like:
+
+```sql
+SELECT *
+FROM Orders
+WHERE order_date > '2024-01-01';
+```
+
+that scans billions of rows, it can consume significant CPU and I/O resources, slowing down customer-facing operations such as placing new orders.
+
+This is why production systems typically separate operational and analytical workloads.
+
+---
+
+# Common technologies
+
+| OLTP                              | OLAP            |
+| --------------------------------- | --------------- |
+| PostgreSQL                        | Snowflake       |
+| MySQL                             | Google BigQuery |
+| Microsoft SQL Server              | Amazon Redshift |
+| Oracle Database                   | ClickHouse      |
+| MongoDB (transactional workloads) | Apache Druid    |
+
+---
+
+# Trade-offs
+
+| OLTP                           | OLAP                                          |
+| ------------------------------ | --------------------------------------------- |
+| Excellent for transactions     | Excellent for analytics                       |
+| Very low latency               | Optimized for large-scale scans               |
+| Strong ACID guarantees         | Optimized for aggregations                    |
+| Handles many concurrent writes | Handles complex analytical queries            |
+| Poor for heavy reporting       | Poor for high-frequency transactional updates |
+
+---
+
+# Interview-ready summary
+
+> **OLTP databases are designed for fast, concurrent transactional workloads with frequent inserts, updates, and point lookups. They prioritize low latency, ACID guarantees, and data integrity. OLAP databases are designed for analytical workloads over large historical datasets, supporting complex aggregations, reporting, and business intelligence. In large-scale systems, OLTP powers the application's operational data, while OLAP powers dashboards and analytics, typically using separate databases to avoid analytical queries impacting transactional performance.**
+
 ## Question 6. What is a quorum in distributed systems?
 
 ## Question 7. What is data locality and why is it important?

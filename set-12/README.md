@@ -1983,6 +1983,438 @@ A/B testing is essential to evaluate new ranking models before full rollout.
 
 ## Question 5. How do you design a comment threading system?
 
+# How do you design a comment threading system?
+
+## Direct answer
+
+A comment threading system organizes comments into a **hierarchical tree**, allowing users to reply to comments and create nested discussions. At scale (e.g., Reddit, YouTube, Facebook), the system should:
+
+- Support top-level comments and nested replies
+- Efficiently fetch an entire thread
+- Handle millions of comments
+- Support pagination for large discussions
+- Rank comments (newest, oldest, most popular)
+- Prevent excessively deep nesting for performance and usability
+
+The key design challenge is storing and querying hierarchical data efficiently while keeping read latency low.
+
+---
+
+# Requirements / Problem Framing
+
+### Functional Requirements
+
+- Add top-level comments
+- Reply to comments
+- Fetch comment threads
+- Edit/delete comments
+- Like/upvote comments
+- Sort comments (newest, oldest, top)
+- Collapse/expand replies
+
+### Non-functional Requirements
+
+- Low read latency (<100 ms)
+- High availability
+- Scalable to millions of comments
+- Consistent ordering
+- Efficient pagination
+
+---
+
+# High-Level Architecture
+
+```text
+               User
+                 │
+                 ▼
+          Comment API Service
+                 │
+     ┌───────────┴───────────┐
+     ▼                       ▼
+ Comment Database      Cache (Redis)
+     │
+     ▼
+ Search / Analytics (Optional)
+```
+
+**Flow:**
+
+1. User submits a comment or reply.
+2. API validates and stores it.
+3. Cache is updated or invalidated.
+4. Clients fetch comments from cache/database.
+5. Responses are assembled into a threaded tree.
+
+---
+
+# Data Model
+
+A simple and scalable schema uses an adjacency list.
+
+| Field           | Description                         |
+| --------------- | ----------------------------------- |
+| commentId       | Unique comment ID                   |
+| postId          | Associated post/article             |
+| parentCommentId | Parent comment (NULL for top-level) |
+| authorId        | User ID                             |
+| content         | Comment text                        |
+| createdAt       | Timestamp                           |
+| updatedAt       | Timestamp                           |
+| score           | Likes/upvotes                       |
+| replyCount      | Number of direct replies            |
+| status          | Active/Deleted                      |
+
+Example:
+
+| commentId | parentCommentId |
+| --------- | --------------- |
+| C1        | NULL            |
+| C2        | C1              |
+| C3        | C1              |
+| C4        | C2              |
+| C5        | C4              |
+
+Tree:
+
+```text
+C1
+├── C2
+│     └── C4
+│            └── C5
+└── C3
+```
+
+---
+
+# Posting a Comment
+
+### Top-level comment
+
+```text
+parentCommentId = NULL
+```
+
+### Reply
+
+```text
+parentCommentId = Parent ID
+```
+
+Store the reply and increment the parent's `replyCount`.
+
+---
+
+# Fetching Threads
+
+A common approach:
+
+1. Fetch top-level comments for a post.
+2. Fetch replies separately.
+3. Build the tree in memory.
+
+```text
+Post
+
+↓
+
+Top-Level Comments
+
+↓
+
+Replies
+
+↓
+
+Assemble Tree
+
+↓
+
+Return JSON
+```
+
+Example response:
+
+```json
+{
+  "commentId": "C1",
+  "content": "Great article!",
+  "replies": [
+    {
+      "commentId": "C2",
+      "content": "I agree!",
+      "replies": []
+    }
+  ]
+}
+```
+
+This minimizes recursive database queries.
+
+---
+
+# Sorting
+
+Support multiple ordering strategies.
+
+### Top-level comments
+
+- Newest
+- Oldest
+- Most liked
+- Most relevant
+
+### Replies
+
+Often sorted by:
+
+- Oldest first (conversation flow)
+- Newest first
+- Most liked
+
+Example:
+
+```text
+Top Comments
+
+↓
+
+Score DESC
+
+↓
+
+Newest Replies
+```
+
+---
+
+# Pagination
+
+Large threads can contain millions of comments.
+
+Instead of loading everything:
+
+```text
+Top Comments
+
+↓
+
+First 20
+
+↓
+
+Load More
+```
+
+Replies can also be paginated:
+
+```text
+Comment
+
+↓
+
+View 15 More Replies
+```
+
+Cursor-based pagination is preferred over offset pagination for better scalability.
+
+---
+
+# Limiting Nesting Depth
+
+Unlimited nesting creates:
+
+- Slow rendering
+- Complex queries
+- Poor user experience
+
+Example:
+
+```text
+Maximum Depth = 5
+
+Depth 6
+
+↓
+
+Attach as child visually
+or
+Flatten into level 5
+```
+
+Many platforms cap nesting depth and continue replies under the deepest visible level.
+
+---
+
+# Caching
+
+Popular discussions are read much more than written.
+
+Cache:
+
+- Top comments
+- First page of replies
+- Comment counts
+
+```text
+Client
+
+↓
+
+Redis
+
+↓
+
+Database
+```
+
+Invalidate or refresh cache when new comments are added.
+
+---
+
+# Scaling Strategy
+
+## Database Sharding
+
+Partition comments by:
+
+- Post ID
+- Hash(Post ID)
+
+```text
+Shard 1
+
+Post 1-1000
+
+Shard 2
+
+Post 1001-2000
+```
+
+This keeps all comments for a post together, simplifying thread retrieval.
+
+---
+
+## Read Replicas
+
+Heavy read traffic:
+
+```text
+Writes
+
+↓
+
+Primary DB
+
+↓
+
+Read Replicas
+
+↓
+
+Clients
+```
+
+Improves read scalability without affecting writes.
+
+---
+
+## Asynchronous Processing
+
+Non-critical updates are processed asynchronously.
+
+Examples:
+
+- Notification delivery
+- Search indexing
+- Analytics
+- Popularity score updates
+
+```text
+Comment Created
+
+↓
+
+Message Queue
+
+↓
+
+Notification Service
+```
+
+---
+
+# Handling Deleted Comments
+
+Avoid breaking thread structure.
+
+Instead of removing a comment:
+
+```text
+[Deleted]
+```
+
+Children remain accessible.
+
+Example:
+
+```text
+C1
+
+↓
+
+[Deleted]
+
+↓
+
+Replies remain visible
+```
+
+This preserves conversation context.
+
+---
+
+# Trade-offs
+
+| Approach                           | Advantages                | Disadvantages                     |
+| ---------------------------------- | ------------------------- | --------------------------------- |
+| Adjacency List (`parentCommentId`) | Simple, easy writes       | Tree reconstruction required      |
+| Nested Set Model                   | Fast subtree reads        | Expensive inserts/updates         |
+| Materialized Path                  | Simple subtree queries    | Path updates on moves             |
+| Closure Table                      | Fast hierarchical queries | More storage and write complexity |
+
+**Interview tip:** For social media systems, the **Adjacency List** model is the most common choice because comments are inserted frequently and rarely moved.
+
+---
+
+# Security / Observability
+
+### Security
+
+- Authentication and authorization
+- Spam detection
+- Rate limiting
+- Content moderation
+- HTML/script sanitization to prevent XSS
+
+### Observability
+
+Monitor:
+
+- Comment creation latency
+- Thread retrieval latency
+- Cache hit ratio
+- Replies per comment
+- Read/write QPS
+- Database query latency
+- Error rates
+
+---
+
+# Interview-ready summary
+
+> "I would model comments using an adjacency list where each comment stores its parent comment ID. Top-level comments have a null parent, while replies reference their parent. To serve a thread efficiently, I'd fetch top-level comments and their replies, then assemble the hierarchy in memory. Popular threads would be cached, comments would be sharded by post ID, and read replicas would handle high read traffic. I'd use cursor-based pagination, cap nesting depth to keep queries efficient, preserve deleted comments as placeholders to maintain thread integrity, and process notifications and analytics asynchronously. This design provides scalable writes, efficient reads, and supports discussions with millions of comments."
+
 ## Question 6. How do you design a shopping cart system?
 
 ## Question 7. How do you design a dynamic pricing engine?

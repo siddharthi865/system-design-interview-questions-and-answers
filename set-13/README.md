@@ -1385,6 +1385,267 @@ When designing an API Gateway, consider:
 
 ## Question 5. What is the difference between synchronous API calls and asynchronous events?
 
+# Direct answer
+
+The key difference is **how services communicate and whether the caller waits for a response**.
+
+- **Synchronous API calls** are **request-response** interactions where the caller waits until the callee finishes processing and returns a result.
+- **Asynchronous events** are **fire-and-forget** interactions where the producer publishes an event and continues without waiting for consumers to process it.
+
+A simple rule of thumb:
+
+> **Use synchronous APIs when an immediate response is required. Use asynchronous events when work can happen later and services should be loosely coupled.**
+
+---
+
+# Comparison
+
+| Aspect            | Synchronous API                     | Asynchronous Events                     |
+| ----------------- | ----------------------------------- | --------------------------------------- |
+| Communication     | Request-Response                    | Publish-Subscribe / Event-driven        |
+| Caller waits?     | ✅ Yes                              | ❌ No                                   |
+| Coupling          | Tighter                             | Looser                                  |
+| Latency           | Higher (depends on downstream)      | Lower for the producer                  |
+| Failure handling  | Immediate error returned            | Retry via queues/event broker           |
+| Scalability       | Limited by synchronous dependencies | Better horizontal scalability           |
+| Typical transport | HTTP, RPC (e.g., gRPC)              | Message broker (Kafka, RabbitMQ, etc.)  |
+| Best for          | Queries and immediate actions       | Background processing and notifications |
+
+---
+
+# Synchronous API Calls
+
+The client sends a request and blocks until it receives a response.
+
+```text
+Client
+   │
+HTTP/gRPC Request
+   │
+Service B
+   │
+Process Request
+   │
+HTTP/gRPC Response
+   │
+Client continues
+```
+
+### Example
+
+An e-commerce checkout service needs to verify payment before confirming an order.
+
+```text
+Checkout
+
+↓
+
+Payment Service
+
+↓
+
+Payment Success
+
+↓
+
+Create Order
+```
+
+The checkout service **cannot continue until payment succeeds**, making a synchronous API appropriate.
+
+### Advantages
+
+- Immediate response
+- Simpler request-response flow
+- Easier debugging
+- Suitable for user-facing operations
+
+### Disadvantages
+
+- Higher latency
+- Tighter coupling
+- Cascading failures if downstream services are unavailable
+- Reduced scalability under heavy load
+
+---
+
+# Asynchronous Events
+
+A producer publishes an event without waiting for consumers.
+
+```text
+Producer
+
+↓
+
+Message Broker
+
+↓
+
+Consumer A
+
+Consumer B
+
+Consumer C
+```
+
+The producer doesn't need to know:
+
+- Who consumes the event
+- How many consumers exist
+- When processing completes
+
+### Example
+
+After an order is placed:
+
+```text
+Order Created Event
+
+↓
+
+Inventory Service
+
+↓
+
+Notification Service
+
+↓
+
+Analytics Service
+
+↓
+
+Recommendation Service
+```
+
+The order service simply publishes an event and continues.
+
+### Advantages
+
+- Loose coupling
+- High scalability
+- Better resilience
+- Easy to add new consumers
+- Supports eventual consistency
+
+### Disadvantages
+
+- Increased architectural complexity
+- Eventual (rather than immediate) consistency
+- Harder debugging and tracing
+- Duplicate or out-of-order event handling must be considered
+
+---
+
+# Real-World Example
+
+### Food Delivery App
+
+**Synchronous APIs**
+
+```text
+User clicks "Place Order"
+
+↓
+
+Order Service
+
+↓
+
+Payment Service
+
+↓
+
+Response to User
+```
+
+The user expects an immediate confirmation.
+
+**Asynchronous Events**
+
+Once the order is confirmed:
+
+```text
+Order Confirmed Event
+
+↓
+
+Restaurant Service
+
+↓
+
+Delivery Assignment
+
+↓
+
+Email Service
+
+↓
+
+Analytics
+```
+
+These tasks don't need to delay the user's response.
+
+---
+
+# Design Considerations
+
+### Use synchronous APIs when:
+
+- The caller needs an immediate result.
+- Operations are interactive (e.g., login, payment authorization).
+- Strong consistency is required before proceeding.
+
+### Use asynchronous events when:
+
+- Processing can happen in the background.
+- Multiple independent services react to the same event.
+- High throughput and loose coupling are priorities.
+- Temporary delays are acceptable.
+
+---
+
+# Trade-offs
+
+| Decision            | Pros                                         | Cons                                                     |
+| ------------------- | -------------------------------------------- | -------------------------------------------------------- |
+| Synchronous APIs    | Simple, immediate feedback, easier debugging | Higher latency, tighter coupling, cascading failures     |
+| Asynchronous Events | Scalable, resilient, loosely coupled         | More complex, eventual consistency, harder observability |
+
+---
+
+# Common Interview Pattern
+
+Many large-scale systems combine both approaches.
+
+```text
+Client
+
+↓
+
+Order Service
+
+│
+├── Sync → Payment Service
+│
+└── Publish "OrderCreated" Event
+          │
+          ├── Inventory Service
+          ├── Notification Service
+          ├── Analytics Service
+          └── Recommendation Service
+```
+
+This hybrid architecture keeps the critical user flow synchronous while offloading secondary work asynchronously.
+
+---
+
+# Interview-ready summary
+
+> "Synchronous API calls follow a request-response model where the caller waits for the callee to finish processing, making them suitable for operations requiring immediate feedback, such as authentication or payment authorization. Asynchronous events follow a publish-subscribe model where the producer publishes an event and continues without waiting, enabling loose coupling, better scalability, and resilience. In practice, distributed systems often use synchronous APIs for critical user-facing workflows and asynchronous events for background processing, notifications, and integration between services."
+
 ## Question 6. How do you design a streaming API system?
 
 ## Question 7. What is the role of gRPC in microservices?

@@ -1306,6 +1306,304 @@ Log every failover decision and expose metrics and alerts so operators can quick
 
 ## Question 5. What is split-brain problem in distributed systems?
 
+# What is the split-brain problem in distributed systems?
+
+## Direct answer
+
+A **split-brain problem** occurs when a distributed system **incorrectly allows two or more nodes to believe they are the leader (or primary) at the same time**.
+
+As a result, multiple nodes accept writes independently, leading to **conflicting updates, data inconsistency, and potential corruption**.
+
+It most commonly happens due to **network partitions** or incorrect failover mechanisms.
+
+---
+
+# Intuition
+
+Imagine a database cluster with:
+
+```text
+Primary
+   |
+Secondary
+```
+
+Normally:
+
+- Primary accepts writes.
+- Secondary replicates data.
+
+Now suppose the network connection between them fails.
+
+```text
+Primary   X   Secondary
+```
+
+The secondary can no longer determine whether the primary has crashed or is merely unreachable.
+
+If it promotes itself to primary while the original primary is still running:
+
+```text
+Primary A   (accepting writes)
+
+Primary B   (also accepting writes)
+```
+
+Now there are **two primaries**.
+
+This is the split-brain problem.
+
+---
+
+# Example
+
+Suppose a banking application has two database servers.
+
+Initially:
+
+```text
+        Clients
+           |
+      Primary A
+           |
+     Replication
+           |
+      Secondary B
+```
+
+Everything works correctly.
+
+---
+
+### Network partition
+
+The replication link breaks.
+
+```text
+Primary A      X      Secondary B
+```
+
+Server B assumes A has failed.
+
+It promotes itself.
+
+```text
+Primary A
+
+Primary B
+```
+
+Now both servers accept writes.
+
+---
+
+### Conflicting writes
+
+Customer 1:
+
+```text
+Withdraw ₹500
+
+→ Primary A
+```
+
+Customer 2:
+
+```text
+Deposit ₹1000
+
+→ Primary B
+```
+
+Both operations succeed independently.
+
+Later, when connectivity is restored:
+
+```text
+Balance on A = ₹500
+
+Balance on B = ₹2000
+```
+
+The system now has conflicting versions of the data.
+
+---
+
+# Why does split-brain happen?
+
+Common causes include:
+
+### 1. Network partition
+
+The most common cause.
+
+```text
+A ----X---- B
+```
+
+Both nodes assume the other is down.
+
+---
+
+### 2. Incorrect failover
+
+A standby becomes primary too quickly without verifying the original primary is actually unavailable.
+
+---
+
+### 3. Delayed heartbeats
+
+Temporary network congestion delays heartbeat messages, causing healthy nodes to be mistakenly declared dead.
+
+---
+
+### 4. Configuration errors
+
+Improper quorum or clustering configuration can allow multiple leaders.
+
+---
+
+# Why is it dangerous?
+
+Split-brain can cause:
+
+- Data corruption
+- Duplicate transactions
+- Lost writes
+- Conflicting records
+- Inconsistent reads
+- Service outages during recovery
+
+Example:
+
+```text
+User updates profile
+
+Replica A:
+Phone = 1111
+
+Replica B:
+Phone = 9999
+```
+
+Both values cannot be correct simultaneously.
+
+---
+
+# How to prevent split-brain
+
+## 1. Leader Election
+
+Only one node is allowed to become leader.
+
+Consensus algorithms such as Raft or Paxos ensure that a leader is elected only after receiving votes from a majority (quorum) of nodes.
+
+---
+
+## 2. Quorum
+
+Require a majority before accepting writes.
+
+Example:
+
+```text
+5 nodes
+
+Need 3 votes
+```
+
+If a network partition creates groups of 2 and 3:
+
+```text
+Group A = 2 nodes
+
+Group B = 3 nodes
+```
+
+Only the group with **3 nodes** can elect a leader and continue processing writes.
+
+The smaller partition becomes read-only or unavailable for writes.
+
+---
+
+## 3. Fencing Tokens
+
+Each newly elected leader receives a **monotonically increasing token**.
+
+Example:
+
+```text
+Leader A
+
+Token = 10
+```
+
+New leader:
+
+```text
+Leader B
+
+Token = 11
+```
+
+Storage systems reject operations from older tokens.
+
+Even if Leader A is still running, its writes are ignored because it has an outdated token.
+
+---
+
+## 4. Distributed Locking
+
+Before acting as leader, a node acquires a distributed lock.
+
+If it loses the lock, it must stop accepting writes.
+
+---
+
+## 5. STONITH (Shoot The Other Node In The Head)
+
+In high-availability clusters, the newly promoted primary forcibly powers off or isolates the old primary before serving writes.
+
+This ensures only one active primary exists.
+
+---
+
+# Split-brain vs Network Partition
+
+| Network Partition                          | Split-Brain                                         |
+| ------------------------------------------ | --------------------------------------------------- |
+| Communication between nodes is interrupted | Multiple nodes incorrectly become leaders           |
+| May or may not cause problems              | Always leads to inconsistency if both accept writes |
+| A network issue                            | A failure in cluster coordination                   |
+
+A network partition **can lead to** split-brain if the system lacks proper coordination mechanisms.
+
+---
+
+# Trade-offs
+
+| Prevention Technique | Advantages                          | Disadvantages                                |
+| -------------------- | ----------------------------------- | -------------------------------------------- |
+| Leader election      | Reliable, well-understood           | Requires consensus overhead                  |
+| Quorum               | Prevents multiple leaders           | Some partitions become unavailable           |
+| Fencing tokens       | Protects storage from stale leaders | Requires token-aware infrastructure          |
+| Distributed locks    | Simple leader control               | Lock service becomes critical infrastructure |
+| STONITH              | Strong protection                   | Operationally more complex                   |
+
+---
+
+# Real-world examples
+
+- **Primary-replica databases:** Prevent dual primaries through leader election and quorum.
+- **Distributed coordination services:** Systems like Apache ZooKeeper and etcd use quorum-based consensus to avoid split-brain.
+- **Container orchestration:** Kubernetes relies on its control plane's consensus mechanisms so only one leader manages cluster state.
+
+---
+
+# Interview-ready summary
+
+> "A split-brain problem occurs when multiple nodes in a distributed system mistakenly believe they are the leader and simultaneously accept writes, usually after a network partition or faulty failover. This can result in conflicting updates and data corruption. Production systems prevent split-brain using quorum-based leader election, consensus protocols like Raft or Paxos, fencing tokens, and, in some HA clusters, STONITH to ensure only one primary can process writes at any time."
+
 ## Question 6. How do you design a consensus algorithm?
 
 ## Question 7. How do you recover from data corruption in distributed databases?

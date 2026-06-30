@@ -1188,6 +1188,402 @@ A design that follows SOLID is usually easier to evolve when requirements change
 
 ## Question 5. How do you design a parking lot system?
 
+# Direct Answer
+
+A parking lot system is a classic Low-Level Design interview problem. The goal is to design a system that can:
+
+- Park vehicles
+- Remove vehicles
+- Track available spots
+- Calculate parking fees
+- Support multiple vehicle and spot types
+
+The key is to model the right entities and keep the design extensible.
+
+---
+
+# Requirements / Problem Framing
+
+## Functional Requirements
+
+1. Park a vehicle
+2. Unpark a vehicle
+3. Generate parking ticket
+4. Calculate parking fee
+5. Track available spots
+6. Support different vehicle types:
+   - Motorcycle
+   - Car
+   - Truck
+
+7. Support different parking spot types:
+   - Motorcycle Spot
+   - Compact Spot
+   - Large Spot
+
+## Non-Functional Requirements
+
+- Fast spot allocation (O(log n) or O(1))
+- Easy to add new vehicle types
+- Thread-safe in real systems
+- Extensible pricing model
+
+---
+
+# Core Entities
+
+```text
+ParkingLot
+ ├── ParkingFloor
+ │      ├── ParkingSpot
+ │      ├── ParkingSpot
+ │      └── ParkingSpot
+ │
+ ├── EntranceGate
+ ├── ExitGate
+ └── Ticket
+```
+
+---
+
+# Class Diagram (Conceptual)
+
+```text
+Vehicle
+ ├── Car
+ ├── Motorcycle
+ └── Truck
+
+ParkingSpot
+ ├── CompactSpot
+ ├── MotorcycleSpot
+ └── LargeSpot
+
+ParkingFloor
+ParkingLot
+Ticket
+Payment
+```
+
+---
+
+# Low-Level Design (JavaScript)
+
+## Vehicle
+
+```javascript
+class Vehicle {
+  constructor(number, type) {
+    this.number = number;
+    this.type = type;
+  }
+}
+```
+
+```javascript
+class Car extends Vehicle {
+  constructor(number) {
+    super(number, "CAR");
+  }
+}
+
+class Motorcycle extends Vehicle {
+  constructor(number) {
+    super(number, "MOTORCYCLE");
+  }
+}
+
+class Truck extends Vehicle {
+  constructor(number) {
+    super(number, "TRUCK");
+  }
+}
+```
+
+---
+
+## Parking Spot
+
+```javascript
+class ParkingSpot {
+  constructor(id, type) {
+    this.id = id;
+    this.type = type;
+    this.isOccupied = false;
+    this.vehicle = null;
+  }
+
+  assignVehicle(vehicle) {
+    this.vehicle = vehicle;
+    this.isOccupied = true;
+  }
+
+  removeVehicle() {
+    this.vehicle = null;
+    this.isOccupied = false;
+  }
+}
+```
+
+---
+
+## Ticket
+
+```javascript
+class Ticket {
+  constructor(ticketId, vehicle, spot) {
+    this.ticketId = ticketId;
+    this.vehicle = vehicle;
+    this.spot = spot;
+    this.entryTime = Date.now();
+  }
+}
+```
+
+---
+
+## Parking Floor
+
+```javascript
+class ParkingFloor {
+  constructor(id) {
+    this.id = id;
+    this.spots = [];
+  }
+
+  addSpot(spot) {
+    this.spots.push(spot);
+  }
+
+  getAvailableSpot(vehicleType) {
+    return this.spots.find(
+      (spot) => !spot.isOccupied && this.canFit(vehicleType, spot.type),
+    );
+  }
+
+  canFit(vehicleType, spotType) {
+    const mapping = {
+      MOTORCYCLE: ["MOTORCYCLE", "COMPACT", "LARGE"],
+      CAR: ["COMPACT", "LARGE"],
+      TRUCK: ["LARGE"],
+    };
+
+    return mapping[vehicleType].includes(spotType);
+  }
+}
+```
+
+---
+
+## Parking Lot
+
+```javascript
+class ParkingLot {
+  constructor() {
+    this.floors = [];
+    this.activeTickets = new Map();
+  }
+
+  addFloor(floor) {
+    this.floors.push(floor);
+  }
+
+  parkVehicle(vehicle) {
+    for (const floor of this.floors) {
+      const spot = floor.getAvailableSpot(vehicle.type);
+
+      if (spot) {
+        spot.assignVehicle(vehicle);
+
+        const ticket = new Ticket(crypto.randomUUID(), vehicle, spot);
+
+        this.activeTickets.set(ticket.ticketId, ticket);
+
+        return ticket;
+      }
+    }
+
+    throw new Error("Parking Full");
+  }
+
+  unparkVehicle(ticketId) {
+    const ticket = this.activeTickets.get(ticketId);
+
+    if (!ticket) {
+      throw new Error("Invalid Ticket");
+    }
+
+    ticket.spot.removeVehicle();
+
+    this.activeTickets.delete(ticketId);
+
+    return ticket;
+  }
+}
+```
+
+---
+
+# Fee Calculation
+
+Use the Strategy Pattern to support multiple pricing models.
+
+## Fee Strategy
+
+```javascript
+class FeeStrategy {
+  calculate(entryTime, exitTime) {}
+}
+```
+
+---
+
+### Hourly Pricing
+
+```javascript
+class HourlyFeeStrategy extends FeeStrategy {
+  calculate(entryTime, exitTime) {
+    const hours = Math.ceil((exitTime - entryTime) / (1000 * 60 * 60));
+
+    return hours * 20;
+  }
+}
+```
+
+This follows:
+
+- Open/Closed Principle
+- Easy to add new pricing schemes
+
+---
+
+# Improving Spot Search at Scale
+
+### Naive Approach
+
+```text
+Find first available spot
+```
+
+Complexity:
+
+```text
+O(total_spots)
+```
+
+Bad for:
+
+```text
+100,000+ spots
+```
+
+---
+
+### Better Approach
+
+Maintain:
+
+```javascript
+availableCompactSpots;
+availableLargeSpots;
+availableMotorcycleSpots;
+```
+
+using:
+
+```text
+Priority Queue
+TreeSet
+Min Heap
+```
+
+Now allocation becomes:
+
+```text
+O(log n)
+```
+
+or
+
+```text
+O(1)
+```
+
+depending on implementation.
+
+---
+
+# Design Patterns Used
+
+| Pattern   | Usage                 |
+| --------- | --------------------- |
+| Strategy  | Fee calculation       |
+| Factory   | Vehicle creation      |
+| Singleton | ParkingLot instance   |
+| Observer  | Display board updates |
+| State     | Spot occupancy state  |
+
+---
+
+# Follow-Up Questions Interviewers Ask
+
+### How would you show available spots on display boards?
+
+Maintain counters:
+
+```javascript
+availableCompactCount;
+availableLargeCount;
+availableBikeCount;
+```
+
+Update on park/unpark.
+
+---
+
+### How would you support reservations?
+
+Add:
+
+```javascript
+Reservation;
+```
+
+entity.
+
+Reserve spot before arrival.
+
+---
+
+### How would you support EV charging spots?
+
+Add:
+
+```javascript
+ElectricSpot extends ParkingSpot
+```
+
+No changes to existing code (OCP).
+
+---
+
+### How would you support multiple parking lots?
+
+Introduce:
+
+```text
+ParkingLotManager
+    ├── Lot1
+    ├── Lot2
+    └── Lot3
+```
+
+---
+
+# Interview-Ready Summary
+
+> I would model the system around ParkingLot, ParkingFloor, ParkingSpot, Vehicle, Ticket, and Payment entities. Vehicles are assigned compatible spots, and a ticket is generated at entry. Active tickets are tracked in memory for fast lookup. Fee calculation is implemented using the Strategy pattern so pricing rules can evolve independently. For scalability, available spots are maintained in separate data structures rather than scanning all spots. The design follows SOLID principles and can easily support reservations, EV charging, display boards, and multiple parking lots.
+
 ## Question 6. How do you design a library management system?
 
 ## Question 7. How do you design a movie ticket booking system?
